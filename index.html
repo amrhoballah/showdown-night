@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Showdown Night</title>
+<meta name="description" content="Six party games for one TV and a room full of people: bilingual Jeopardy, Outburst, Mafia, Act It Out, emoji riddles and Wavelength.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800;900&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&family=Cairo:wght@400;600;700;900&display=swap">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><span class="dot"></span><strong style="font-family:'Unbounded',sans-serif;">SHOWDOWN NIGHT</strong></div>
+  <div class="score-row" id="scoreRow"></div>
+  <button class="home-btn" id="homeBtn">Home</button>
+</div>
+
+<div class="wrap">
+
+  <!-- ===================== HOME / SETUP ===================== -->
+  <section id="screen-home">
+    <div class="hero">
+      <p class="eyebrow">Game night &middot; 12 players</p>
+      <h1 class="title-xl">Pick sides, then pick a game.</h1>
+      <p class="sub">Set up how your crew is split, then launch either board from here. Koshary-break optional. Scores carry across both games, so the trivia round and the shout-it-out round feed one final leaderboard.</p>
+    </div>
+
+    <div class="card" style="padding:24px; margin-top:10px;">
+      <h3 style="font-size:1.1rem;">How are you splitting up?</h3>
+      <div class="mode-grid" id="modeGrid"></div>
+
+      <div id="teamSetupArea" class="team-setup"></div>
+
+      <div id="ffaSetupArea" hidden>
+        <p class="sub" style="margin-top:16px;">Add each player. Tap their name any time during the games to give a point.</p>
+        <div class="ffa-list" id="ffaList"></div>
+        <div class="add-row">
+          <input id="ffaInput" type="text" placeholder="Type a name and press Enter&hellip;" maxlength="18">
+          <button class="btn ghost" id="ffaAddBtn">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-launch">
+      <div class="launch-card" style="--glow:#ffb649;">
+        <span class="tag">Game 1 &middot; 60 questions &middot; EN + عربي</span>
+        <h3>Jeopardy</h3>
+        <p>Two full boards &mdash; one English, one Arabic with its own native categories (أكمل المثل, طرب, سينما). Six categories &times; five values each, a hidden Daily Double with real wagering, and a Final Jeopardy where every team bets part of its score.</p>
+        <button class="btn go" id="launchTrivia">Choose a board</button>
+      </div>
+      <div class="launch-card" style="--glow:#4ad6a6;">
+        <span class="tag">Game 2 &middot; 9 rounds &middot; ~30 min</span>
+        <h3>Outburst Rounds</h3>
+        <p>A mystery category appears &mdash; from ice cream flavors to Cairo Uber drivers &mdash; the clock starts, and everyone shouts out as many matches as they can before time's up. The hidden list reveals after &mdash; tally what you actually said.</p>
+        <button class="btn go ghost" id="launchOutburst">Start round 1</button>
+      </div>
+      <div class="launch-card" style="--glow:#ff6b6b;">
+        <span class="tag">Game 3 &middot; 12 players &middot; ~40 min</span>
+        <h3>Mafia</h3>
+        <p>The screen plays narrator. Pass the laptop once for secret roles, then it runs every night phase, the day timer, the vote, and the reveal &mdash; and tells you when one side has won.</p>
+        <button class="btn go ghost" id="launchMafia">Deal the roles</button>
+      </div>
+      <div class="launch-card" style="--glow:#b98eff;">
+        <span class="tag">Game 4 &middot; ~15 min</span>
+        <h3>Act It Out</h3>
+        <p>One guesser sits with their back to the TV. Everyone else sees the word and has 60 seconds to act, describe, or mime their way through as many as they can.</p>
+        <button class="btn go ghost" id="launchAct">Set the clock</button>
+      </div>
+      <div class="launch-card" style="--glow:#ffd166;">
+        <span class="tag">Game 5 &middot; ~15 min</span>
+        <h3>Emoji Riddles</h3>
+        <p>Films, songs, places, and dishes spelled out entirely in emoji. Fast, loud, and readable from the far end of the room &mdash; good for catching your breath between the heavy games.</p>
+        <button class="btn go ghost" id="launchEmoji">Show the first riddle</button>
+      </div>
+      <div class="launch-card" style="--glow:#4ad6a6;">
+        <span class="tag">Game 6 &middot; ~20 min</span>
+        <h3>Wavelength</h3>
+        <p>A spectrum runs 1 to 10 across the screen &mdash; overrated to underrated, waste of money to worth every pound. One player secretly sees the number and gives a single clue; their team argues, then taps a number.</p>
+        <button class="btn go ghost" id="launchWave">Spin it up</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== JEOPARDY: BOARD PICKER ===================== -->
+  <section id="screen-jpicker" hidden>
+    <div class="card stage" id="pickerCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="pickerHomeBtn">&larr; Back to home</button>
+    </div>
+  </section>
+
+  <!-- ===================== JEOPARDY BOARD ===================== -->
+  <section id="screen-board" hidden>
+    <div class="board-head">
+      <div>
+        <p class="eyebrow" id="boardEyebrow">Jeopardy</p>
+        <h2 id="boardTitle" style="font-size:1.8rem;">Pick a category and a value</h2>
+      </div>
+      <div class="btn-row">
+        <span class="sub mono" id="boardProgress" style="margin:0; align-self:center; font-size:0.8rem;"></span>
+        <button class="btn ghost" id="finalBtn">Final Jeopardy</button>
+        <button class="btn ghost" id="boardSwitchBtn">Switch board</button>
+        <button class="btn ghost" id="boardDoneBtn">Home</button>
+      </div>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <!-- ===================== DAILY DOUBLE ===================== -->
+  <section id="screen-dd" hidden>
+    <div class="card stage" id="ddCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="ddHomeBtn">&larr; Back to board</button>
+    </div>
+  </section>
+
+  <!-- ===================== JEOPARDY QUESTION ===================== -->
+  <section id="screen-question" hidden>
+    <div class="card qscreen">
+      <p class="pts mono" id="qPts">CATEGORY &middot; 100</p>
+      <p class="sub" id="ddNote" hidden></p>
+      <p class="qtext" id="qText">Question</p>
+      <button class="btn" id="revealBtn">Reveal answer</button>
+      <p class="atext" id="aText" hidden>Answer</p>
+      <div class="award-row" id="awardRow" hidden></div>
+      <button class="kicker-link" id="skipAwardBtn" hidden>No one got it &mdash; skip</button>
+    </div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="backToBoardBtn">&larr; Back to board</button>
+    </div>
+  </section>
+
+  <!-- ===================== FINAL JEOPARDY ===================== -->
+  <section id="screen-final" hidden>
+    <div class="card stage" id="finalCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="finalHomeBtn">&larr; Back to home</button>
+    </div>
+  </section>
+
+  <!-- ===================== OUTBURST ===================== -->
+  <section id="screen-outburst" hidden>
+    <div class="card ob-stage" id="obCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="obHomeBtn">&larr; Back to home</button>
+      <span class="sub" id="obProgress" style="margin:0;"></span>
+    </div>
+  </section>
+
+  <!-- ===================== MAFIA ===================== -->
+  <section id="screen-mafia" hidden>
+    <div class="card stage" id="mafiaCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="mafiaHomeBtn">&larr; Back to home</button>
+      <span class="sub" id="mafiaStatus" style="margin:0;"></span>
+    </div>
+  </section>
+
+  <!-- ===================== ACT IT OUT ===================== -->
+  <section id="screen-act" hidden>
+    <div class="card stage" id="actCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="actHomeBtn">&larr; Back to home</button>
+    </div>
+  </section>
+
+  <!-- ===================== EMOJI RIDDLES ===================== -->
+  <section id="screen-emoji" hidden>
+    <div class="card stage" id="emojiCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="emojiHomeBtn">&larr; Back to home</button>
+      <span class="sub" id="emojiProgress" style="margin:0;"></span>
+    </div>
+  </section>
+
+  <!-- ===================== WAVELENGTH ===================== -->
+  <section id="screen-wave" hidden>
+    <div class="card stage" id="waveCard"></div>
+    <div class="foot-nav">
+      <button class="btn ghost" id="waveHomeBtn">&larr; Back to home</button>
+      <span class="sub" id="waveProgress" style="margin:0;"></span>
+    </div>
+  </section>
+
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

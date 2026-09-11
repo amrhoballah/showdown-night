@@ -1,0 +1,32 @@
+import type { EmojiRiddle } from '../types';
+
+export const EMOJI: EmojiRiddle[] = [
+    { e:'🦁👑', a:'The Lion King', h:'Film' },
+    { e:'🚢🧊💔', a:'Titanic', h:'Film' },
+    { e:'⚡🧙‍♂️🤓', a:'Harry Potter', h:'Film' },
+    { e:'🕷️🕸️🧑', a:'Spider-Man', h:'Film' },
+    { e:'🦖🏝️🚙', a:'Jurassic Park', h:'Film' },
+    { e:'🃏🦇🌃', a:'The Dark Knight', h:'Film' },
+    { e:'🐀👨‍🍳🇫🇷', a:'Ratatouille', h:'Film' },
+    { e:'💍🌋🧝‍♂️', a:'The Lord of the Rings', h:'Film' },
+    { e:'🤖🌱❤️', a:'WALL-E', h:'Film' },
+    { e:'🎭🔴💰🇪🇸', a:'Money Heist (La Casa de Papel)', h:'Series' },
+    { e:'🐉👑❄️⚔️', a:'Game of Thrones', h:'Series' },
+    { e:'🧪👨‍🦲🚐', a:'Breaking Bad', h:'Series' },
+    { e:'🍚🍝🧅🍅', a:'Koshary', h:'Food' },
+    { e:'🟢🍲🐔', a:'Molokhia', h:'Food' },
+    { e:'🫘🥙🔥', a:'Ta\'meya &amp; fuul', h:'Food' },
+    { e:'🌺🫖🧊', a:'Karkade (hibiscus tea)', h:'Drink' },
+    { e:'🔺🔺🔺🐪', a:'The Pyramids of Giza', h:'Place' },
+    { e:'🚢🏜️➡️🌊', a:'The Suez Canal', h:'Place' },
+    { e:'🗼🥖🇫🇷', a:'Paris', h:'Place' },
+    { e:'🕋🕌🏜️', a:'Mecca', h:'Place' },
+    { e:'⚽🇪🇬👑', a:'Mohamed Salah', h:'Person' },
+    { e:'🐐⚽🇦🇷🏆', a:'Lionel Messi', h:'Person' },
+    { e:'🎤🌙👑', a:'Umm Kulthum (Kawkab El Sharq)', h:'Person' },
+    { e:'🍎📱👨‍🦲⚫', a:'Steve Jobs', h:'Person' },
+    { e:'🙈🙉🙊', a:'See no evil, hear no evil, speak no evil', h:'Saying' },
+    { e:'🪨👊📄✂️', a:'Rock, paper, scissors', h:'Saying' },
+    { e:'🌙🍽️👨‍👩‍👧‍👦', a:'Iftar', h:'Occasion' },
+    { e:'💃🥁🎺👰', a:'A zaffa', h:'Occasion' }
+  ];
