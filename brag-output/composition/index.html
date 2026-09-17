@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Showdown Night — brag</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<script src="assets/audio-data.js"></script>
+<style>
+  @font-face { font-family: "Unbounded"; font-weight: 700; src: url("assets/fonts/unbounded-700.woff2") format("woff2"); }
+  @font-face { font-family: "Unbounded"; font-weight: 800; src: url("assets/fonts/unbounded-800.woff2") format("woff2"); }
+  @font-face { font-family: "Unbounded"; font-weight: 900; src: url("assets/fonts/unbounded-900.woff2") format("woff2"); }
+  @font-face { font-family: "Work Sans"; font-weight: 500; src: url("assets/fonts/worksans-500.woff2") format("woff2"); }
+  @font-face { font-family: "Work Sans"; font-weight: 600; src: url("assets/fonts/worksans-600.woff2") format("woff2"); }
+  @font-face { font-family: "Work Sans"; font-weight: 700; src: url("assets/fonts/worksans-700.woff2") format("woff2"); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("assets/fonts/plexmono-500.woff2") format("woff2"); }
+  @font-face { font-family: "IBM Plex Mono"; font-weight: 700; src: url("assets/fonts/plexmono-700.woff2") format("woff2"); }
+  @font-face { font-family: "Cairo"; font-weight: 700; src: url("assets/fonts/cairo-ar-700.woff2") format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: "Cairo"; font-weight: 900; src: url("assets/fonts/cairo-ar-900.woff2") format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+  @font-face { font-family: "Cairo"; font-weight: 700; src: url("assets/fonts/cairo-700.woff2") format("woff2"); unicode-range: U+0000-00FF, U+2000-206F; }
+  @font-face { font-family: "Cairo"; font-weight: 900; src: url("assets/fonts/cairo-900.woff2") format("woff2"); unicode-range: U+0000-00FF, U+2000-206F; }
+
+  :root {
+    --bg: #14121f; --bg-raised: #1c1930; --bg-raised-2: #241f3d; --line: #352f52;
+    --ink: #f3efe8; --ink-dim: #b6aed1; --ink-faint: #8279a1;
+    --accent: #ffb649; --accent-ink: #2a1a00; --alert: #ff6b6b; --good: #4ad6a6;
+    --violet: #b98eff; --yellow: #ffd166;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Work Sans", sans-serif; }
+  #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--bg); --bass: 0; }
+  .clip { box-sizing: border-box; width: 100%; height: 100%; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  .disp { font-family: "Unbounded", sans-serif; }
+  .ar { font-family: "Cairo", sans-serif; direction: rtl; }
+
+  /* persistent atmosphere */
+  #atmos { position: absolute; inset: 0; pointer-events: none; }
+  .glow { position: absolute; border-radius: 50%; }
+  #glow-a { width: 1300px; height: 1300px; left: -420px; top: -620px;
+    background: radial-gradient(circle, rgba(255,182,73,0.30) 0%, rgba(255,182,73,0) 65%);
+    opacity: calc(0.65 + var(--bass) * 0.35); }
+  #glow-b { width: 1400px; height: 1400px; right: -520px; bottom: -760px;
+    background: radial-gradient(circle, rgba(185,142,255,0.26) 0%, rgba(185,142,255,0) 65%);
+    opacity: calc(0.6 + var(--bass) * 0.4); }
+
+  /* ---------- scene 1: hook ---------- */
+  #s1 { display: flex; align-items: center; justify-content: center; }
+  .stats { display: flex; gap: 0; align-items: flex-end; }
+  .stat + .stat { border-left: 4px solid var(--line); margin-left: 80px; padding-left: 80px; }
+  .stat { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .stat .n { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 300px; line-height: 0.95; letter-spacing: -0.03em; }
+  .stat .l { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 44px; letter-spacing: 0.16em; color: var(--ink-dim); padding-left: 12px; }
+  .stat.hot .n { color: var(--accent); text-shadow: 0 0 60px rgba(255,182,73,0.35); }
+  .stat.hot .l { color: var(--accent); }
+  .s1-kicker { position: absolute; left: 120px; top: 110px; font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 26px; letter-spacing: 0.18em; color: var(--ink-faint); }
+
+  /* ---------- scene 2: reveal ---------- */
+  #s2 { padding: 96px 120px 0; display: flex; flex-direction: column; }
+  .wordmark { display: flex; align-items: center; gap: 34px; }
+  .wordmark .dot { display: block; width: 58px; height: 58px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 calc(16px + var(--bass) * 14px) rgba(255,182,73,0.18); flex: none; }
+  .wordmark .wm { white-space: nowrap; font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 112px; letter-spacing: -0.01em; line-height: 1; }
+  .s2-sub { font-size: 40px; color: var(--ink-dim); margin: 26px 0 0 94px; font-weight: 500; }
+  .launch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 64px; }
+  .lc { position: relative; overflow: hidden; background: var(--bg-raised); border: 3px solid var(--line); border-radius: 30px;
+    height: 250px; padding: 36px 40px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; }
+  .lc .halo { position: absolute; width: 380px; height: 380px; right: -150px; top: -170px; border-radius: 50%;
+    background: radial-gradient(circle, var(--glow) 0%, transparent 70%); opacity: calc(0.5 + var(--bass) * 0.35); }
+  .lc .tag { position: relative; font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 24px; letter-spacing: 0.12em; color: var(--ink-dim); text-transform: uppercase; }
+  .lc h3 { position: relative; margin: 0; font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 58px; line-height: 1.05; }
+
+  /* ---------- top bar (scenes 3-5) ---------- */
+  #topbar { z-index: 5; height: 116px; padding: 0 120px; display: flex; align-items: center; gap: 22px;
+    border-bottom: 3px solid var(--line); background: rgba(20,18,31,0.92); }
+  #topbar .dot { display: block; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 8px rgba(255,182,73,0.18); }
+  #topbar .brand { font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 32px; }
+  .chips { margin-left: auto; display: flex; gap: 18px; }
+  .chip { display: flex; align-items: center; gap: 14px; background: var(--bg-raised); border: 3px solid var(--line); border-radius: 999px; padding: 10px 26px 10px 12px; }
+  .chip .sw { display: block; width: 40px; height: 40px; border-radius: 50%; }
+  .chip .nm { font-size: 26px; font-weight: 600; color: var(--ink-dim); }
+  .chip .val { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 34px; min-width: 3.2ch; text-align: right; }
+
+  /* ---------- scene 3: jeopardy ---------- */
+  #s3 { padding: 160px 120px 0; }
+  .board-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 26px; letter-spacing: 0.16em; color: var(--accent); text-transform: uppercase; margin: 0 0 12px; }
+  .board-head h2 { margin: 0; font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 56px; }
+  .board-head .prog { font-family: "IBM Plex Mono", monospace; font-size: 28px; color: var(--ink-dim); font-weight: 500; }
+  .board { display: grid; grid-template-columns: repeat(6, 268px); grid-auto-rows: 104px; gap: 14px; }
+  .board .head { grid-row: auto; height: 104px; box-sizing: border-box; background: var(--bg-raised-2); border: 3px solid var(--line); border-radius: 16px;
+    display: flex; align-items: center; justify-content: center; text-align: center; padding: 8px 12px;
+    font-family: "Unbounded", sans-serif; font-weight: 700; font-size: 25px; line-height: 1.2; }
+  .cell { display: block; box-sizing: border-box; height: 104px; border-radius: 16px; border: 3px solid var(--line); background: var(--bg-raised);
+    color: var(--accent); font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 46px; line-height: 98px; text-align: center; }
+  .cell.used { color: var(--ink-faint); opacity: 0.35; }
+  #cursor { position: absolute; left: 0; top: 0; width: 64px; height: 76px; }
+  #dd { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px;
+    background: rgba(20,18,31,0.93); }
+  #dd .banner { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 164px; line-height: 1; color: var(--accent);
+    text-shadow: 0 0 80px rgba(255,182,73,0.45); }
+  #dd .meta { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 40px; letter-spacing: 0.14em; color: var(--ink-dim); }
+  #dd .rules { display: flex; gap: 30px; }
+  #dd .rule { display: block; font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 50px; padding: 22px 44px; border-radius: 22px; border: 4px solid; }
+  #dd .rule.up { color: var(--good); border-color: var(--good); background: rgba(74,214,166,0.10); }
+  #dd .rule.down { color: var(--alert); border-color: var(--alert); background: rgba(255,107,107,0.10); }
+
+  /* ---------- scene 4: arabic ---------- */
+  #s4 { padding: 150px 120px 0; display: flex; gap: 60px; align-items: flex-start; }
+  #s4-wrap { position: absolute; inset: 116px 0 0 0; padding: 60px 120px 0; display: flex; gap: 56px; align-items: flex-start; }
+  .qcard { flex: none; width: 700px; box-sizing: border-box; background: var(--bg-raised); border: 3px solid var(--line); border-radius: 30px;
+    padding: 50px 50px 56px; display: flex; flex-direction: column; align-items: flex-end; gap: 26px; }
+  .qcard .pts { font-family: "Cairo", sans-serif; font-weight: 700; font-size: 34px; color: var(--accent); direction: rtl; }
+  .qcard .q { font-family: "Cairo", sans-serif; font-weight: 900; font-size: 84px; line-height: 1.45; direction: rtl; text-align: right; margin: 0; }
+  .qcard .a { font-family: "Cairo", sans-serif; font-weight: 900; font-size: 128px; line-height: 1.2; color: var(--good); direction: rtl; margin: 10px 0 0; }
+  .qcard .rule-line { display: block; width: 100%; height: 4px; background: var(--line); border-radius: 2px; }
+  .ar-side { flex: 1; display: flex; flex-direction: column; align-items: flex-end; }
+  .ar-side .eyebrow { direction: rtl; }
+  .ar-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%; direction: rtl; }
+  .ar-board .head { height: 150px; box-sizing: border-box; background: var(--bg-raised-2); border: 3px solid var(--line); border-radius: 18px;
+    display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px 14px;
+    font-family: "Cairo", sans-serif; font-weight: 900; font-size: 44px; line-height: 1.3; }
+  .ar-board .head.pick { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--accent); }
+  .ar-vals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%; margin-top: 16px; direction: rtl; }
+  .ar-vals .cell { height: 92px; line-height: 86px; font-size: 40px; }
+  .ar-title { font-family: "Cairo", sans-serif; font-weight: 900; font-size: 72px; margin: 0 0 30px; direction: rtl; line-height: 1.2; }
+
+  /* ---------- scene 5a: outburst ---------- */
+  .s5 { padding: 116px 120px 0; }
+  .s5-inner { position: absolute; inset: 116px 0 0 0; padding: 70px 120px 0; box-sizing: border-box; }
+  .ob-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 60px; }
+  .ob-cat { margin: 0; max-width: 1180px; font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 92px; line-height: 1.12; }
+  .timer { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 300px; line-height: 0.9; color: var(--accent); }
+  .ob-answers { display: flex; gap: 22px; margin-top: 60px; }
+  .ob-answer { display: block; background: var(--bg-raised-2); border: 3px solid var(--line); border-radius: 18px; padding: 22px 34px; font-size: 42px; font-weight: 600; }
+
+  /* ---------- scene 5b: emoji ---------- */
+  .emoji-stage { position: absolute; inset: 116px 0 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; }
+  .emoji { font-size: 250px; line-height: 1.15; letter-spacing: 0.06em; }
+  .emoji-ans { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 130px; color: var(--good); line-height: 1; }
+
+  /* ---------- scene 5c: wavelength ---------- */
+  .wave-stage { position: absolute; inset: 116px 0 0 0; padding: 60px 160px 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 26px; }
+  .wave-labels { display: flex; justify-content: space-between; font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 44px; letter-spacing: 0.08em; color: var(--ink); }
+  .wave-track { position: relative; height: 130px; border-radius: 24px; border: 3px solid var(--line); overflow: hidden;
+    background: linear-gradient(90deg, #b98eff 0%, #241f3d 50%, #ffb649 100%); }
+  .needle { position: absolute; top: 0; bottom: 0; width: 12px; margin-left: -6px; border-radius: 6px; background: var(--good); box-shadow: 0 0 0 4px rgba(0,0,0,0.35); }
+  .numpad { display: grid; grid-template-columns: repeat(10, 1fr); gap: 18px; }
+  .numpad .k { display: block; height: 142px; border-radius: 24px; border: 3px solid var(--line); background: var(--bg-raised-2);
+    font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 60px; line-height: 136px; text-align: center; color: var(--ink); }
+  .numpad .k.chosen { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .wave-result { display: flex; align-items: center; justify-content: center; gap: 70px; margin-top: 18px; }
+  .wave-result .lbl { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 32px; letter-spacing: 0.12em; color: var(--ink-dim); }
+  .wave-result .burst { font-family: "Unbounded", sans-serif; font-weight: 900; font-size: 150px; color: var(--good); line-height: 1; }
+
+  /* ---------- scene 6: outro ---------- */
+  #s6 { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 44px; }
+  #s6 .wordmark .wm { font-size: 124px; }
+  #s6 .wordmark .dot { width: 70px; height: 70px; }
+  .tagline { margin: 0; font-family: "Unbounded", sans-serif; font-weight: 800; font-size: 78px; color: var(--accent); }
+  .outro-chips { display: flex; gap: 26px; margin-top: 20px; }
+  .outro-chips .chip .nm { font-size: 34px; }
+  .outro-chips .chip .val { font-size: 44px; }
+  .outro-chips .chip .sw { width: 52px; height: 52px; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="24">
+
+  <div id="atmos" data-layout-ignore><div id="glow-a" class="glow"></div><div id="glow-b" class="glow"></div></div>
+
+  <!-- Scene 1: hook -->
+  <section id="s1" class="clip" data-start="0" data-duration="3.5" data-track-index="1">
+    <div class="s1-kicker" id="s1-kicker">GAME NIGHT</div>
+    <div class="stats">
+      <div class="stat" id="st1"><span class="n">12</span><span class="l">PLAYERS</span></div>
+      <div class="stat" id="st2"><span class="n">1</span><span class="l">TV</span></div>
+      <div class="stat hot" id="st3"><span class="n">0</span><span class="l">PHONES</span></div>
+    </div>
+  </section>
+
+  <!-- Scene 2: reveal -->
+  <section id="s2" class="clip" data-start="3.5" data-duration="4.3" data-track-index="1">
+    <div class="wordmark" id="s2-wm"><span class="dot"></span><span class="wm">SHOWDOWN NIGHT</span></div>
+    <p class="s2-sub" id="s2-sub">Six party games for one TV and a room full of people.</p>
+    <div class="launch-grid">
+      <div class="lc" style="--glow:#ffb649"><div class="halo"></div><span class="tag">Game 1 · EN + <span class="ar">عربي</span></span><h3>Jeopardy</h3></div>
+      <div class="lc" style="--glow:#4ad6a6"><div class="halo"></div><span class="tag">Game 2 · 9 rounds</span><h3>Outburst Rounds</h3></div>
+      <div class="lc" style="--glow:#ff6b6b"><div class="halo"></div><span class="tag">Game 3 · 12 players</span><h3>Mafia</h3></div>
+      <div class="lc" style="--glow:#b98eff"><div class="halo"></div><span class="tag">Game 4 · back to the TV</span><h3>Act It Out</h3></div>
+      <div class="lc" style="--glow:#ffd166"><div class="halo"></div><span class="tag">Game 5 · ~15 min</span><h3>Emoji Riddles</h3></div>
+      <div class="lc" style="--glow:#4ad6a6"><div class="halo"></div><span class="tag">Game 6 · 1 to 10</span><h3>Wavelength</h3></div>
+    </div>
+  </section>
+
+  <!-- Persistent top bar (scenes 3-5) -->
+  <header id="topbar" class="clip" data-start="7.8" data-duration="12.4" data-track-index="2" style="height:116px">
+    <span class="dot"></span><span class="brand">SHOWDOWN NIGHT</span>
+    <div class="chips">
+      <div class="chip"><span class="sw" style="background:#ff6b6b"></span><span class="nm">Wlad El Balad</span><span class="val" id="chip-a">600</span></div>
+      <div class="chip"><span class="sw" style="background:#4ad6a6"></span><span class="nm">El Captains</span><span class="val" id="chip-b">700</span></div>
+    </div>
+  </header>
+
+  <!-- Scene 3: jeopardy board + daily double -->
+  <section id="s3" class="clip" data-start="7.8" data-duration="3.1" data-track-index="1">
+    <div id="s3-body">
+      <div class="board-head">
+        <div><p class="eyebrow">Jeopardy · English</p><h2>Pick a category and a value</h2></div>
+        <span class="prog">11 / 30 played</span>
+      </div>
+      <div class="board" id="board">
+        <div class="head">Movies &amp; TV</div><div class="head">Music</div><div class="head">Football</div><div class="head">Geography</div><div class="head">History</div><div class="head">Science &amp; Tech</div>
+        <div class="cell used">100</div><div class="cell used">100</div><div class="cell used">100</div><div class="cell">100</div><div class="cell used">100</div><div class="cell used">100</div>
+        <div class="cell used">200</div><div class="cell">200</div><div class="cell used">200</div><div class="cell used">200</div><div class="cell">200</div><div class="cell used">200</div>
+        <div class="cell">300</div><div class="cell used">300</div><div class="cell">300</div><div class="cell">300</div><div class="cell used">300</div><div class="cell">300</div>
+        <div class="cell">400</div><div class="cell">400</div><div class="cell" id="target-cell">400</div><div class="cell">400</div><div class="cell">400</div><div class="cell">400</div>
+        <div class="cell">500</div><div class="cell">500</div><div class="cell">500</div><div class="cell">500</div><div class="cell">500</div><div class="cell">500</div>
+      </div>
+    </div>
+    <svg id="cursor" viewBox="0 0 32 38"><path d="M2 2 L2 30 L9.5 23.5 L14.5 35 L19.5 33 L14.5 21.5 L25 21.5 Z" fill="#f3efe8" stroke="#14121f" stroke-width="2.4" stroke-linejoin="round"/></svg>
+    <div id="dd">
+      <div class="banner" id="dd-banner">DAILY DOUBLE!</div>
+      <div class="meta" id="dd-meta">FOOTBALL · 400 · WLAD EL BALAD WAGERS 400</div>
+      <div class="rules" id="dd-rules"><span class="rule up">Right +400</span><span class="rule down">Wrong −400</span></div>
+    </div>
+  </section>
+
+  <!-- Scene 4: arabic board -->
+  <section id="s4" class="clip" data-start="10.9" data-duration="2.9" data-track-index="1">
+    <div id="s4-wrap">
+      <div class="qcard" id="qcard">
+        <span class="pts">أكمل المثل · 100</span>
+        <p class="q" id="ar-q">«القرد في عين أمه ...»</p>
+        <span class="rule-line"></span>
+        <p class="a" id="ar-a">غزال</p>
+      </div>
+      <div class="ar-side" id="ar-side">
+        <p class="eyebrow">Jeopardy · العربية</p>
+        <p class="ar-title">اختر فئة وقيمة</p>
+        <div class="ar-board">
+          <div class="head pick">أكمل المثل</div><div class="head">سينما ودراما</div><div class="head">طرب وموسيقى</div>
+          <div class="head">جغرافيا عربية</div><div class="head">تاريخ</div><div class="head">علوم ومعلومات</div>
+        </div>
+        <div class="ar-vals">
+          <div class="cell mono">١٠٠</div><div class="cell mono">٢٠٠</div><div class="cell mono">٣٠٠</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Scene 5a: outburst -->
+  <section id="s5a" class="clip" data-start="13.8" data-duration="2.2" data-track-index="1">
+    <div class="s5-inner">
+      <p class="eyebrow" id="ob-eyebrow">Outburst · Round 4 of 9</p>
+      <div class="ob-top">
+        <h2 class="ob-cat" id="ob-cat">Things an Uber/Careem Driver Says in Cairo Traffic</h2>
+        <div class="timer" id="ob-timer">60</div>
+      </div>
+      <div class="ob-answers">
+        <span class="ob-answer" id="ob1">“Fi zahma”</span>
+        <span class="ob-answer" id="ob2">“Ana ablak”</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Scene 5b: emoji -->
+  <section id="s5b" class="clip" data-start="16" data-duration="1.9" data-track-index="1">
+    <div class="emoji-stage">
+      <p class="eyebrow" id="em-eyebrow">Emoji Riddles · Food</p>
+      <div class="emoji" id="emoji">🍚🍝🧅🍅</div>
+      <div class="emoji-ans" id="emoji-ans">Koshary</div>
+    </div>
+  </section>
+
+  <!-- Scene 5c: wavelength -->
+  <section id="s5c" class="clip" data-start="17.9" data-duration="2.3" data-track-index="1">
+    <div class="wave-stage">
+      <div class="wave-labels" id="wave-labels"><span>OVERRATED</span><span>UNDERRATED</span></div>
+      <div class="wave-track" id="wave-track"><div class="needle" id="needle" style="left:66.67%"></div></div>
+      <div class="numpad" id="numpad">
+        <span class="k">1</span><span class="k">2</span><span class="k">3</span><span class="k">4</span><span class="k">5</span>
+        <span class="k">6</span><span class="k" id="k7">7</span><span class="k">8</span><span class="k">9</span><span class="k">10</span>
+      </div>
+      <div class="wave-result" id="wave-result">
+        <span class="lbl">GUESSED 7 · TARGET 7</span><span class="burst">+4</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Scene 6: outro -->
+  <section id="s6" class="clip" data-start="20.2" data-duration="3.8" data-track-index="1">
+    <div id="s6-body" style="display:flex;flex-direction:column;align-items:center;gap:44px;">
+      <div class="wordmark" id="s6-wm"><span class="dot"></span><span class="wm">SHOWDOWN NIGHT</span></div>
+      <p class="tagline" id="tagline">Pick sides, then pick a game.</p>
+      <div class="outro-chips" id="outro-chips">
+        <div class="chip"><span class="sw" style="background:#ff6b6b"></span><span class="nm">Wlad El Balad</span><span class="val" id="oc-a">0</span></div>
+        <div class="chip"><span class="sw" style="background:#4ad6a6"></span><span class="nm">El Captains</span><span class="val" id="oc-b">0</span></div>
+        <div class="chip"><span class="sw" style="background:#b98eff"></span><span class="nm">Sons of the Nile</span><span class="val" id="oc-c">0</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Audio: music bed -->
+  <audio id="bgm" src="assets/music/happy-beats-business-moves-vol-10-by-ende-dot-app.mp3" data-start="0" data-duration="24" data-track-index="10" data-volume="1"></audio>
+  <!-- Audio: voiceover -->
+  <audio id="vo1" src="assets/vo/vo1.wav" data-start="0.15" data-duration="3.29" data-track-index="3" data-volume="1"></audio>
+  <audio id="vo2" src="assets/vo/vo2.wav" data-start="3.6" data-duration="4.14" data-track-index="3" data-volume="1"></audio>
+  <audio id="vo3" src="assets/vo/vo3.wav" data-start="7.9" data-duration="3.03" data-track-index="3" data-volume="1"></audio>
+  <audio id="vo4" src="assets/vo/vo4.wav" data-start="11.0" data-duration="2.99" data-track-index="4" data-volume="1"></audio>
+  <audio id="vo5" src="assets/vo/vo5.wav" data-start="13.9" data-duration="6.28" data-track-index="3" data-volume="1"></audio>
+  <audio id="vo6" src="assets/vo/vo6.wav" data-start="20.6" data-duration="1.82" data-track-index="3" data-volume="1"></audio>
+  <!-- Audio: SFX -->
+  <audio id="sfx-hook1" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="0.27" data-duration="0.18" data-track-index="11" data-volume="0.7"></audio>
+  <audio id="sfx-hook2" src="assets/sfx/impact/impactSoft_medium_004.ogg" data-start="0.95" data-duration="0.15" data-track-index="12" data-volume="0.7"></audio>
+  <audio id="sfx-hook3" src="assets/sfx/impact/impactSoft_heavy_003.ogg" data-start="2.2" data-duration="0.54" data-track-index="13" data-volume="0.8"></audio>
+  <audio id="sfx-deal" src="assets/sfx/casino/card-slide-1.ogg" data-start="5.19" data-duration="0.6" data-track-index="14" data-volume="0.55"></audio>
+  <audio id="sfx-click" src="assets/sfx/ui/mouseclick1.ogg" data-start="8.9" data-duration="0.06" data-track-index="15" data-volume="0.75"></audio>
+  <audio id="sfx-dd" src="assets/sfx/impact/impactBell_heavy_000.ogg" data-start="9.25" data-duration="1.5" data-track-index="16" data-volume="0.6"></audio>
+  <audio id="sfx-ar" src="assets/sfx/interface/drop_002.ogg" data-start="12.55" data-duration="0.19" data-track-index="17" data-volume="0.7"></audio>
+  <audio id="sfx-emoji" src="assets/sfx/interface/drop_001.ogg" data-start="16.8" data-duration="0.11" data-track-index="18" data-volume="0.7"></audio>
+  <audio id="sfx-tap" src="assets/sfx/ui/click2.ogg" data-start="18.7" data-duration="0.06" data-track-index="19" data-volume="0.75"></audio>
+  <audio id="sfx-plus" src="assets/sfx/casino/chips-collide-1.ogg" data-start="19.3" data-duration="0.26" data-track-index="20" data-volume="0.6"></audio>
+  <audio id="sfx-logo" src="assets/sfx/impact/impactBell_heavy_003.ogg" data-start="20.19" data-duration="0.65" data-track-index="21" data-volume="0.6"></audio>
+  <audio id="sfx-chips" src="assets/sfx/casino/chips-stack-1.ogg" data-start="21.3" data-duration="0.29" data-track-index="22" data-volume="0.55"></audio>
+</div>
+
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const counter = (el, from, to, at, dur) => {
+    const o = { v: from };
+    tl.fromTo(o, { v: from }, { v: to, duration: dur, ease: "power2.out", immediateRender: false, onUpdate: () => { el.textContent = Math.round(o.v); } }, at);
+  };
+
+  // ---------- Scene 1: hook ----------
+  tl.fromTo("#s1-kicker", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 0.1);
+  // beat-grid: stat 1 at 0.27s (beat 0.27); stat 2 at 0.95 follows the voice ("One TV"); stat 3 on "Not a single phone"
+  tl.fromTo("#st1", { opacity: 0, y: 120, scale: 1.25 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(1.6)" }, 0.27);
+  tl.fromTo("#st2", { opacity: 0, y: 120, scale: 1.25 }, { opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(1.6)" }, 0.95);
+  tl.fromTo("#st3", { opacity: 0, scale: 1.9, rotation: -8 }, { opacity: 1, scale: 1, rotation: 0, duration: 0.5, ease: "back.out(2.2)" }, 2.2);
+  tl.to("#s1 .stats", { scale: 1.04, duration: 1.2, ease: "none" }, 2.25);
+  tl.to("#s1 .stats", { opacity: 0, y: -40, duration: 0.2, ease: "power2.in" }, 3.28);
+
+  // ---------- Scene 2: reveal ----------
+  tl.fromTo("#s2-wm", { opacity: 0, x: -80 }, { opacity: 1, x: 0, duration: 0.5, ease: "expo.out" }, 3.55);
+  tl.fromTo("#s2-sub", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 4.05);
+  // beat-grid: card deal starts on beat 5.19s, 0.1s stagger; full set then holds ~2s
+  tl.fromTo("#s2 .lc", { opacity: 0, y: 90, rotation: 3 }, { opacity: 1, y: 0, rotation: 0, duration: 0.5, ease: "power3.out", stagger: 0.1 }, 5.19);
+  tl.to("#s2 .launch-grid", { y: -10, duration: 2, ease: "sine.inOut" }, 5.8);
+  tl.to("#s2", { opacity: 0, duration: 0.18 }, 7.6);
+
+  // ---------- Scene 3: jeopardy ----------
+  tl.fromTo("#topbar .brand, #topbar .dot, #topbar .chip", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.05, ease: "power3.out" }, 7.8);
+  tl.fromTo("#s3-body", { opacity: 0, x: 140 }, { opacity: 1, x: 0, duration: 0.45, ease: "expo.out" }, 7.8);
+  tl.fromTo("#board .head", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: "power2.out" }, 7.95);
+  // cursor: Football·400 centre = (120 + 2*282 + 134, 160 + header + head row + 3 rows) ≈ (818, 842)
+  tl.fromTo("#cursor", { x: 1500, y: 1100, opacity: 0 }, { x: 812, y: 830, opacity: 1, duration: 0.75, ease: "power3.inOut" }, 8.1);
+  tl.to("#cursor", { scale: 0.85, duration: 0.08, yoyo: true, repeat: 1 }, 8.88);
+  tl.to("#target-cell", { backgroundColor: "#ffb649", color: "#2a1a00", borderColor: "#ffb649", scale: 1.08, duration: 0.18, ease: "power2.out" }, 8.9);
+  tl.fromTo("#dd", { opacity: 0 }, { opacity: 1, duration: 0.2 }, 9.2);
+  tl.to("#s3-body, #cursor", { opacity: 0, duration: 0.15 }, 9.2);
+  tl.fromTo("#dd-banner", { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(1.8)" }, 9.25);
+  tl.fromTo("#dd-meta", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 9.5);
+  tl.fromTo("#dd-rules .rule", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.35, stagger: 0.12, ease: "back.out(1.6)" }, 9.65);
+  tl.to("#dd-banner", { scale: 1.04, duration: 1.1, ease: "sine.inOut" }, 9.8);
+  counter(document.getElementById("chip-a"), 600, 1000, 10.2, 0.6);
+  tl.fromTo("#topbar .chip", { scale: 1 }, { scale: 1.07, duration: 0.15, yoyo: true, repeat: 1, stagger: 0 }, 10.2);
+
+  // ---------- Scene 4: arabic ----------
+  tl.fromTo("#s4-wrap", { clipPath: "inset(0 0 0 100%)" }, { clipPath: "inset(0 0 0 0%)", duration: 0.5, ease: "power3.inOut" }, 10.9);
+  tl.fromTo("#ar-side .head", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.35, stagger: 0.05, ease: "power3.out" }, 11.1);
+  tl.fromTo("#ar-q", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 11.5);
+  tl.fromTo("#ar-a", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(2)" }, 12.55);
+
+  // ---------- Scene 5a: outburst ----------
+  tl.fromTo("#ob-eyebrow", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 13.8);
+  tl.fromTo("#ob-cat", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.4, ease: "expo.out" }, 13.82);
+  tl.fromTo("#ob-timer", { opacity: 0, scale: 1.4 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(1.6)" }, 13.9);
+  tl.set("#ob-timer", { textContent: "59" }, 14.6);
+  tl.set("#ob-timer", { textContent: "58" }, 15.3);
+  tl.fromTo("#ob1", { opacity: 0, y: 30, rotation: -3 }, { opacity: 1, y: 0, rotation: 0, duration: 0.3, ease: "back.out(2)" }, 14.45);
+  tl.fromTo("#ob2", { opacity: 0, y: 30, rotation: 3 }, { opacity: 1, y: 0, rotation: 0, duration: 0.3, ease: "back.out(2)" }, 14.9);
+
+  // ---------- Scene 5b: emoji ----------
+  tl.fromTo("#em-eyebrow", { opacity: 0 }, { opacity: 1, duration: 0.25 }, 16.0);
+  tl.fromTo("#emoji", { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }, 16.02);
+  tl.fromTo("#emoji-ans", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" }, 16.8);
+
+  // ---------- Scene 5c: wavelength ----------
+  tl.fromTo("#wave-labels", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" }, 17.9);
+  tl.fromTo("#wave-track", { opacity: 0, scaleX: 0.6 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: "expo.out" }, 17.92);
+  tl.fromTo("#numpad .k", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.03, ease: "power3.out" }, 18.0);
+  tl.to("#k7", { backgroundColor: "#ffb649", color: "#2a1a00", borderColor: "#ffb649", scale: 1.1, duration: 0.15, ease: "power2.out" }, 18.7);
+  tl.to("#k7", { scale: 1, duration: 0.2 }, 18.85);
+  tl.fromTo("#needle", { opacity: 0, scaleY: 0 }, { opacity: 1, scaleY: 1, duration: 0.3, ease: "back.out(2)" }, 19.2);
+  tl.fromTo("#wave-result", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2)" }, 19.3);
+  counter(document.getElementById("chip-b"), 700, 704, 19.35, 0.3);
+
+  // ---------- Scene 6: outro ----------
+  // beat-locked: 20.19s (strong cue) — wordmark lands
+  tl.fromTo("#s6-wm", { opacity: 0, scale: 1.35 }, { opacity: 1, scale: 1, duration: 0.5, ease: "expo.out" }, 20.19);
+  tl.fromTo("#tagline", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 20.62);
+  tl.fromTo("#outro-chips .chip", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.1, ease: "back.out(1.6)" }, 21.2);
+  counter(document.getElementById("oc-a"), 0, 1000, 21.3, 0.9);
+  counter(document.getElementById("oc-b"), 0, 704, 21.4, 0.9);
+  counter(document.getElementById("oc-c"), 0, 850, 21.5, 0.9);
+  tl.to("#s6-body", { scale: 1.03, duration: 3, ease: "none" }, 20.8);
+  tl.to("#s6-body", { opacity: 0, duration: 0.45, ease: "power2.in" }, 23.45);
+
+  // ---------- Music: duck under voice, lift after the last line, fade out ----------
+  tl.fromTo("#bgm", { volume: 0 }, { volume: 0.15, duration: 0.4 }, 0);
+  tl.to("#bgm", { volume: 0.34, duration: 0.5 }, 22.45);
+  tl.to("#bgm", { volume: 0, duration: 0.95 }, 23.0);
+
+  // ---------- Audio-reactive: bass drives glows (subtle) ----------
+  const root = document.getElementById("root");
+  const AD = window.AUDIO_DATA;
+  for (let f = 0; f < AD.totalFrames; f++) {
+    const b = AD.frames[f].b;
+    const bass = Math.min(1, (b[0] * 0.6 + b[1] * 0.4));
+    tl.call(() => { root.style.setProperty("--bass", bass.toFixed(3)); }, [], f / AD.fps);
+  }
+
+  window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
