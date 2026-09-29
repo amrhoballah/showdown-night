@@ -10,9 +10,9 @@ From the room's point of view **nothing changes**: every game plays and scores e
 
 **Status:** ready-for-agent
 
-- [ ] Vitest is added as a dev dependency, with a `test` script; `npm run build` still typechecks and bundles.
-- [ ] The Night module holds the mode, the entities (stable id, name, colour) and each entity's current score, and exposes setup operations (set mode, set team count, add entity, rename) plus score reads and writes. It has no DOM access.
-- [ ] The shared scoreboard state is backed by the Night; `award()` and `entities()` keep their signatures as adapters, so every game module works unchanged.
-- [ ] An entity's colour stays with the entity, not its position in the list.
-- [ ] Tests cover the setup operations through the Night's public interface only.
+- [x] Vitest is added as a dev dependency, with a `test` script; `npm run build` still typechecks and bundles.
+- [x] The Night module holds the mode, the entities (stable id, name, colour) and each entity's current score, and exposes setup operations (set mode, set team count, add entity, rename) plus score reads and writes. It has no DOM access.
+- [x] The shared scoreboard state is backed by the Night; `award()` and `entities()` keep their signatures as adapters, so every game module works unchanged.
+- [x] An entity's colour stays with the entity, not its position in the list.
+- [x] Tests cover the setup operations through the Night's public interface only.
 - [ ] By hand: every scoring game still awards points and the scoreboard row still shows them, in team mode and free-for-all.

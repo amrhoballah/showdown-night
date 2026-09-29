@@ -1,12 +1,14 @@
 /** The home screen: choosing teams vs free-for-all, and naming everyone. */
 
+import { night, renderScoreboard } from './scoreboard';
 import {
-  state,
-  entities,
-  renderScoreboard,
-  TEAM_COLORS,
-  TEAM_NAME_DEFAULTS,
-} from './scoreboard';
+  entitiesOf,
+  setTeams,
+  setFreeForAll,
+  addPlayer,
+  removePlayer,
+  rename,
+} from './night';
 import { $, escapeHtml, onClickAll, dataNum } from './ui';
 
 interface ModeOption {
@@ -27,8 +29,8 @@ export function renderModeGrid(): void {
   const grid = $('modeGrid');
   grid.innerHTML = MODES.map((m) => {
     const active =
-      (m.key === 'ffa' && state.mode === 'ffa') ||
-      (m.key !== 'ffa' && state.mode === 'teams' && state.teamCount === m.teams);
+      (m.key === 'ffa' && night.mode === 'ffa') ||
+      (m.key !== 'ffa' && night.mode === 'teams' && night.teams.length === m.teams);
     return (
       `<button class="mode-card${active ? ' active' : ''}" data-key="${m.key}">` +
       `<b>${m.label}</b><span>${m.sub}</span></button>`
@@ -39,17 +41,8 @@ export function renderModeGrid(): void {
 
 export function selectMode(key: string): void {
   const m = MODES.find((x) => x.key === key)!;
-  if (m.key === 'ffa') {
-    state.mode = 'ffa';
-  } else {
-    state.mode = 'teams';
-    state.teamCount = m.teams;
-    state.teamNames = Array.from(
-      { length: m.teams },
-      (_, i) => state.teamNames[i] || TEAM_NAME_DEFAULTS[i % 4],
-    );
-  }
-  state.scores = [];
+  if (m.key === 'ffa') setFreeForAll(night);
+  else setTeams(night, m.teams);
   renderModeGrid();
   renderSetupArea();
   renderScoreboard();
@@ -59,26 +52,26 @@ export function renderSetupArea(): void {
   const teamArea = $('teamSetupArea');
   const ffaArea = $('ffaSetupArea');
 
-  if (state.mode === 'teams') {
+  if (night.mode === 'teams') {
     teamArea.hidden = false;
     ffaArea.hidden = true;
-    teamArea.innerHTML = state.teamNames
+    teamArea.innerHTML = night.teams
       .map(
-        (n, i) =>
-          `<div class="team-row"><span class="swatch" style="background:${TEAM_COLORS[i % 4]}"></span>` +
-          `<input type="text" id="teamName${i}" data-i="${i}" value="${escapeHtml(n)}" maxlength="24"></div>`,
+        (t, i) =>
+          `<div class="team-row"><span class="swatch" style="background:${t.color}"></span>` +
+          `<input type="text" id="teamName${i}" data-id="${t.id}" value="${escapeHtml(t.name)}" maxlength="24"></div>`,
       )
       .join('');
     teamArea.querySelectorAll<HTMLInputElement>('input').forEach((inp) => {
       inp.addEventListener('input', () => {
-        state.teamNames[dataNum(inp, 'i')] = inp.value || 'Team';
+        rename(night, dataNum(inp, 'id'), inp.value || 'Team');
         renderScoreboard();
       });
     });
     return;
   }
 
-  if (state.mode === 'ffa') {
+  if (night.mode === 'ffa') {
     teamArea.hidden = true;
     ffaArea.hidden = false;
     renderFfaList();
@@ -91,17 +84,16 @@ export function renderSetupArea(): void {
 
 function renderFfaList(): void {
   const list = $('ffaList');
-  list.innerHTML = state.ffaPlayers
+  list.innerHTML = night.players
     .map(
-      (p, i) =>
+      (p) =>
         `<span class="ffa-chip"><span class="swatch" style="width:14px;height:14px;border-radius:50%;` +
-        `background:${TEAM_COLORS[i % 4]};display:inline-block;"></span>${escapeHtml(p.name)}` +
-        `<button data-i="${i}" aria-label="Remove ${escapeHtml(p.name)}">&times;</button></span>`,
+        `background:${p.color};display:inline-block;"></span>${escapeHtml(p.name)}` +
+        `<button data-id="${p.id}" aria-label="Remove ${escapeHtml(p.name)}">&times;</button></span>`,
     )
     .join('');
   onClickAll(list, 'button', (btn) => {
-    state.ffaPlayers.splice(dataNum(btn, 'i'), 1);
-    state.scores = [];
+    removePlayer(night, dataNum(btn, 'id'));
     renderFfaList();
     renderScoreboard();
   });
@@ -111,7 +103,7 @@ function addFfaPlayer(): void {
   const inp = $('ffaInput') as HTMLInputElement;
   const v = inp.value.trim();
   if (!v) return;
-  state.ffaPlayers.push({ name: v });
+  addPlayer(night, v);
   inp.value = '';
   renderFfaList();
   renderScoreboard();
@@ -129,7 +121,7 @@ export function flashNeedMode(): void {
 
 /** True when there is at least one team or player to award points to. */
 export function hasPlayers(): boolean {
-  return !!state.mode && entities().length > 0;
+  return entitiesOf(night).length > 0;
 }
 
 export function initSetup(): void {

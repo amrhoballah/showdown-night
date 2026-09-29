@@ -1,81 +1,65 @@
-/** Who is playing and what they have scored.
+/** The sticky scoreboard, and the positional adapters over the night.
  *
- *  Every game awards points through `award()`, so the sticky scoreboard at the
- *  top of the screen is the single running total for the whole night. Mafia is
- *  the deliberate exception - it tracks its own players and win condition and
- *  never touches these scores.
+ *  The night itself (entities with stable ids, their scores) lives in
+ *  `night.ts`. The functions here keep the old index-based interface the game
+ *  modules call - `entities()`, `award(i, pts)`, `state.scores[i]` - until
+ *  they move onto the night directly. Mafia is the deliberate exception: it
+ *  tracks its own players and win condition and never touches these scores.
  */
 
 import type { Entity } from './types';
+import { newNight, entitiesOf, scoreOf, addPoints, type Mode } from './night';
 import { $, escapeHtml } from './ui';
 
-export const TEAM_COLORS = [
-  'var(--team-0)',
-  'var(--team-1)',
-  'var(--team-2)',
-  'var(--team-3)',
-];
+export { TEAM_COLORS, TEAM_NAME_DEFAULTS } from './night';
 
-export const TEAM_NAME_DEFAULTS = [
-  'Wlad El Balad',
-  'El Captains',
-  'Sons of the Nile',
-  'El Batal Crew',
-];
+/** Tonight's night. The only instance; the setup screen changes it through
+ *  the night's operations. */
+export const night = newNight();
 
-export type Mode = 'teams' | 'ffa' | null;
-
-export interface AppState {
-  mode: Mode;
-  teamCount: number;
-  teamNames: string[];
-  ffaPlayers: { name: string }[];
-  scores: number[];
-}
-
-export const state: AppState = {
-  mode: null,
-  teamCount: 2,
-  teamNames: TEAM_NAME_DEFAULTS.slice(0, 2),
-  ffaPlayers: [],
-  scores: [],
+/** Read-only view of the night in the old shape. Positional: `scores[i]` is
+ *  the score of `entities()[i]`. Write through the night, never through this. */
+export const state = {
+  get mode(): Mode {
+    return night.mode;
+  },
+  get teamCount(): number {
+    return night.teams.length;
+  },
+  /** Names only, for Mafia's pre-filled player list. */
+  get ffaPlayers(): { name: string }[] {
+    return night.players.map((p) => ({ name: p.name }));
+  },
+  get scores(): number[] {
+    return entitiesOf(night).map((e) => scoreOf(night, e.id));
+  },
 };
 
 /** The current scoring units: teams, or individual players in free-for-all. */
 export function entities(): Entity[] {
-  if (state.mode === 'ffa') {
-    return state.ffaPlayers.map((p, i) => ({ name: p.name, color: TEAM_COLORS[i % 4] }));
-  }
-  return state.teamNames.map((n, i) => ({ name: n, color: TEAM_COLORS[i % 4] }));
-}
-
-/** Keep the scores array the same length as the entity list. */
-export function ensureScores(): void {
-  const n = entities().length;
-  while (state.scores.length < n) state.scores.push(0);
-  state.scores.length = n;
+  return entitiesOf(night).map((e) => ({ name: e.name, color: e.color }));
 }
 
 export function renderScoreboard(): void {
   const row = $('scoreRow');
-  if (!state.mode) {
+  if (!night.mode) {
     row.innerHTML = '';
     return;
   }
-  ensureScores();
-  row.innerHTML = entities()
+  row.innerHTML = entitiesOf(night)
     .map(
-      (e, i) =>
+      (e) =>
         `<div class="score-chip"><span class="swatch" style="background:${e.color}"></span>` +
         `<span class="name">${escapeHtml(e.name)}</span>` +
-        `<span class="val mono">${state.scores[i]}</span></div>`,
+        `<span class="val mono">${scoreOf(night, e.id)}</span></div>`,
     )
     .join('');
 }
 
-/** Add (or, with a negative value, subtract) points for one entity. */
+/** Add (or, with a negative value, subtract) points for the entity at index `i`. */
 export function award(i: number, pts: number): void {
-  ensureScores();
-  state.scores[i] = (state.scores[i] || 0) + pts;
+  const e = entitiesOf(night)[i];
+  if (!e) return;
+  addPoints(night, e.id, pts);
   renderScoreboard();
 }
