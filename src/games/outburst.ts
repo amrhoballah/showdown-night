@@ -10,6 +10,8 @@
 
 import { OUTBURST } from '../data/outburst';
 import { entities, award, recordTurn, nextTurnIndex } from '../scoreboard';
+import { fullLaps } from '../night';
+import { endGameNow } from '../results';
 import { $, show, escapeHtml } from '../ui';
 
 const ob = {
@@ -32,19 +34,19 @@ export function stopOutburstTimer(): void {
 
 export function renderOutburst(): void {
   ob.phase = 'ready';
-  if (ob.index >= OUTBURST.length) {
+  if (ob.index >= roundCount()) {
     renderComplete();
     return;
   }
   const round = OUTBURST[ob.index];
-  $('obProgress').textContent = `Round ${ob.index + 1} of ${OUTBURST.length}`;
+  $('obProgress').textContent = `Round ${ob.index + 1} of ${roundCount()}`;
   const card = $('obCard');
   const ents = entities();
   // Whoever has had the fewest turns shouts next; the host can change it.
   const next = nextTurnIndex();
 
   card.innerHTML =
-    `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${OUTBURST.length}</p>` +
+    `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${roundCount()}</p>` +
     '<h2 class="ob-cat">Ready when you are.</h2>' +
     '<p class="sub">The category stays hidden until you start the clock. Someone shouts ' +
     '&ldquo;go,&rdquo; and your team calls out anything that fits &mdash; no wrong guesses, just ' +
@@ -73,7 +75,7 @@ function startRound(round: (typeof OUTBURST)[number]): void {
   ob.phase = 'running';
 
   card.innerHTML =
-    `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${OUTBURST.length}</p>` +
+    `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${roundCount()}</p>` +
     `<h2 class="ob-cat">${escapeHtml(round.cat)}</h2>` +
     '<div class="timer" id="obTimerEl">60</div>' +
     `<p class="sub">${teamName()}: shout out as many as you can. The list reveals the second the clock hits zero.</p>` +
@@ -143,12 +145,20 @@ function buildTally(): void {
   });
 }
 
+/** Rounds in this game: the last full lap, so every team has had the same
+ *  number of turns. */
+function roundCount(): number {
+  return fullLaps(OUTBURST.length, entities().length);
+}
+
+/** Natural finish, after the last full lap. */
 function renderComplete(): void {
   $('obCard').innerHTML =
     '<p class="ob-round mono">ALL ROUNDS COMPLETE</p>' +
     "<h2 class=\"ob-cat\">That's every category.</h2>" +
-    '<p class="sub">Check the scoreboard up top for the final tally.</p>';
+    '<button class="btn" id="obEndBtn">End game</button>';
   $('obProgress').textContent = 'Finished';
+  $('obEndBtn').addEventListener('click', endGameNow);
 }
 
 /** A new Outburst game, from round 1. */

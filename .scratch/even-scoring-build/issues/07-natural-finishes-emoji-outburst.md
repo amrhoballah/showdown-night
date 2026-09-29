@@ -8,7 +8,7 @@ Spec: [Even scoring across games](../../even-scoring/spec.md). Vocabulary: the d
 
 **Status:** ready-for-agent
 
-- [ ] Emoji: when the last riddle is done, a card reads "That's every riddle" with one End game button (no confirm) into the result screens. "Reshuffle and go again" is removed; playing again is a new game from Home, freshly shuffled.
-- [ ] Outburst: the natural finish comes after the last full lap, 8 rounds for 2 or 4 teams and 9 for 3; the "ALL ROUNDS COMPLETE" card becomes "That's every category" with one End game button.
-- [ ] Act It Out and Wavelength keep their loops unchanged and have no natural finish.
-- [ ] In free-for-all, Outburst's card on Home stays visible, greyed out, with "Teams only" instead of its button; the Night refuses to start Outburst in free-for-all (tested).
+- [x] Emoji: when the last riddle is done, a card reads "That's every riddle" with one End game button (no confirm) into the result screens. "Reshuffle and go again" is removed; playing again is a new game from Home, freshly shuffled.
+- [x] Outburst: the natural finish comes after the last full lap, 8 rounds for 2 or 4 teams and 9 for 3; the "ALL ROUNDS COMPLETE" card becomes "That's every category" with one End game button.
+- [x] Act It Out and Wavelength keep their loops unchanged and have no natural finish.
+- [x] In free-for-all, Outburst's card on Home stays visible, greyed out, with "Teams only" instead of its button; the Night refuses to start Outburst in free-for-all (tested).

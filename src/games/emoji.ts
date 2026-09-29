@@ -6,6 +6,7 @@
 
 import { EMOJI } from '../data/emoji';
 import { entities, award } from '../scoreboard';
+import { endGameNow } from '../results';
 import { $, show, escapeHtml, shuffle, onClickAll, dataNum } from '../ui';
 
 const em = {
@@ -23,16 +24,14 @@ function reset(): void {
 export function renderEmoji(): void {
   const card = $('emojiCard');
 
+  // Natural finish: one deck is one game. Playing again is a new game from Home.
   if (em.idx >= em.deck.length) {
     card.innerHTML =
       '<p class="kicker">All riddles used</p>' +
-      '<h2>That&rsquo;s the whole deck.</h2>' +
-      '<button class="btn" id="emReset">Reshuffle and go again</button>';
+      '<h2>That&rsquo;s every riddle.</h2>' +
+      '<button class="btn" id="emEnd">End game</button>';
     $('emojiProgress').textContent = 'Finished';
-    $('emReset').addEventListener('click', () => {
-      reset();
-      renderEmoji();
-    });
+    $('emEnd').addEventListener('click', endGameNow);
     return;
   }
 

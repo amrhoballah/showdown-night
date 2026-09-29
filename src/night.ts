@@ -162,9 +162,11 @@ export function gameInProgress(night: Night): GameInProgress | null {
 }
 
 /** Start a game of `type`. Refused (returns false) while another game is in
- *  progress, or when there is nobody to play it. */
+ *  progress, when there is nobody to play it, or for Outburst in free-for-all
+ *  (one person shouting alone isn't Outburst). */
 export function startGame(night: Night, type: GameType): boolean {
   if (night.current || entitiesOf(night).length === 0) return false;
+  if (type === 'outburst' && night.mode === 'ffa') return false;
   night.current = { type, scores: {}, turns: {}, lastTurn: null };
   return true;
 }
@@ -247,6 +249,13 @@ export function nextTurn(night: Night): EntityId | null {
     if (turnsOf(night, e.id) === fewest) return e.id;
   }
   return null;
+}
+
+/** How many of `rounds` a turn-based game with a fixed round list can play so
+ *  that every one of `entities` gets the same number of turns: the last full
+ *  lap. Outburst's 9 categories give 8 rounds for 2 or 4 teams, 9 for 3. */
+export function fullLaps(rounds: number, entities: number): number {
+  return entities > 0 ? Math.floor(rounds / entities) * entities : 0;
 }
 
 /** Who is short of turns, for the End game warning: every entity below the

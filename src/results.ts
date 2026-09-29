@@ -48,6 +48,20 @@ function stopResultTimers(): void {
   document.getElementById('confetti')?.remove();
 }
 
+let endGameHandler: () => void = () => {};
+
+/** Set what ending the game in progress does (stop timers, end it, show
+ *  these screens). Wired once by the entry point. */
+export function onEndGame(fn: () => void): void {
+  endGameHandler = fn;
+}
+
+/** End the game in progress with no confirm, straight into the result
+ *  screens. For a natural finish, where there's nothing left to play. */
+export function endGameNow(): void {
+  endGameHandler();
+}
+
 /** Where beat 2 hands over to: Home, unless the game was ended to start another. */
 let afterResults: (() => void) | null = null;
 

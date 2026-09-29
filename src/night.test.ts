@@ -21,6 +21,7 @@ import {
   turnsOf,
   nextTurn,
   unevenTurns,
+  fullLaps,
   TEAM_COLORS,
   TEAM_NAME_DEFAULTS,
   type Night,
@@ -113,6 +114,15 @@ describe('a game in progress', () => {
     expect(startGame(n, 'emoji')).toBe(true);
     expect(startGame(n, 'wavelength')).toBe(false);
     expect(gameInProgress(n)?.type).toBe('emoji');
+  });
+
+  it('is never Outburst in free-for-all', () => {
+    const n = newNight();
+    setFreeForAll(n);
+    ['Karim', 'Hana'].forEach((p) => addPlayer(n, p));
+    expect(startGame(n, 'outburst')).toBe(false);
+    expect(gameInProgress(n)).toBeNull();
+    expect(startGame(n, 'emoji')).toBe(true);
   });
 
   it('needs somebody to play it', () => {
@@ -383,6 +393,10 @@ describe('turns', () => {
       turns(n, 2);
       expect(entitiesOf(n)[nextIndex(n)].name).toBe('Karim');
     });
+  });
+
+  it('finish Outburst at its last full lap, so every team has had as many', () => {
+    expect([2, 3, 4].map((teams) => fullLaps(9, teams))).toEqual([8, 9, 8]);
   });
 
   describe('uneven turns', () => {

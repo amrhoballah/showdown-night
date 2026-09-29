@@ -16,7 +16,7 @@ import { initMafia, renderMafia, stopMafiaTimer } from './games/mafia';
 import { initAct, startAct, resumeAct, stopActTimer } from './games/act';
 import { initEmoji, startEmoji, resumeEmoji } from './games/emoji';
 import { initWave, startWave, resumeWave } from './games/wavelength';
-import { initResults, showResults, GAME_NAMES } from './results';
+import { initResults, showResults, onEndGame, GAME_NAMES } from './results';
 
 /** Every game that feeds the night standings: where it lives, how to start a
  *  new one, and how to go back into one in progress (at the step before
@@ -39,13 +39,19 @@ function stopAllTimers(): void {
   stopMafiaTimer();
 }
 
-/** "Resume …" on the card of the game in progress; the usual label elsewhere. */
+/** "Resume …" on the card of the game in progress; the usual label elsewhere.
+ *  Outburst's card stays visible in free-for-all, greyed out, with "Teams
+ *  only" in place of its button. */
 function renderLaunchCards(): void {
   const current = gameInProgress(night)?.type;
   (Object.keys(GAMES) as GameType[]).forEach((type) => {
     $(GAMES[type].button).textContent =
       type === current ? `Resume ${GAME_NAMES[type]}` : launchLabels[type];
   });
+  const teamsOnly = night.mode === 'ffa';
+  $('launchOutburst').hidden = teamsOnly;
+  $('outburstTeamsOnly').hidden = !teamsOnly;
+  $('launchOutburst').closest('.launch-card')!.classList.toggle('unavailable', teamsOnly);
 }
 
 /** End the game in progress and show its result screens. They hand back to
@@ -57,7 +63,7 @@ function finishGame(then?: () => void): void {
 }
 
 function startNew(type: GameType): void {
-  startGame(night, type);
+  if (!startGame(night, type)) return;
   show(GAMES[type].screen);
   GAMES[type].start();
 }
@@ -116,6 +122,7 @@ function main(): void {
   onScreenChange((id) => {
     if (id === 'screen-home') renderLaunchCards();
   });
+  onEndGame(() => finishGame());
   // A mode or team-count change clears the night, including the game in progress.
   $('modeGrid').addEventListener('click', renderLaunchCards);
 
