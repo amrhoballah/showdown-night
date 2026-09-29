@@ -6,7 +6,7 @@
  */
 
 import { ACT_WORDS } from '../data/act';
-import { entities, award } from '../scoreboard';
+import { entities, award, recordTurn, nextTurnIndex } from '../scoreboard';
 import { $, show, escapeHtml, shuffle } from '../ui';
 
 const act = {
@@ -28,6 +28,8 @@ export function renderAct(): void {
 
   if (act.phase === 'ready') {
     const ents = entities();
+    // Whoever has had the fewest turns plays next; the host can change it.
+    const next = nextTurnIndex();
     card.innerHTML =
       '<p class="kicker">Act It Out</p>' +
       '<h2>One guesser, back to the screen.</h2>' +
@@ -38,7 +40,12 @@ export function renderAct(): void {
         ? '<p class="sub">Playing for:</p><select id="actTeam" style="background:var(--bg-raised-2);' +
           'color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;' +
           'font-family:inherit;font-size:0.95rem;">' +
-          ents.map((e, i) => `<option value="${i}">${escapeHtml(e.name)}</option>`).join('') +
+          ents
+            .map(
+              (e, i) =>
+                `<option value="${i}"${i === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
+            )
+            .join('') +
           '</select>'
         : '') +
       '<button class="btn" id="actStart">Start the 60 seconds</button>';
@@ -103,8 +110,11 @@ export function renderAct(): void {
     '<div class="btn-row"><button class="btn" id="actAward">Add the points</button>' +
     '<button class="btn ghost" id="actAgain">Another turn</button></div>';
 
+  // Adding the points confirms the turn, even at 0. "Another turn" is a
+  // do-over: the round is discarded and no turn is counted.
   $('actAward').addEventListener('click', () => {
     award(act.teamIdx, act.got);
+    recordTurn(act.teamIdx);
     act.phase = 'ready';
     renderAct();
   });

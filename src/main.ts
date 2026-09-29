@@ -1,9 +1,9 @@
 /** Entry point: wires the home screen launch buttons to each game module. */
 
 import './styles.css';
-import { $, show, confirmBox, type ScreenId } from './ui';
+import { $, show, confirmBox, escapeHtml, type ScreenId } from './ui';
 import { night, renderScoreboard, initScoreboard } from './scoreboard';
-import { startGame, endGame, gameInProgress, type GameType } from './night';
+import { startGame, endGame, gameInProgress, unevenTurns, type GameType } from './night';
 import { initSetup, flashNeedMode, hasPlayers } from './setup';
 import { initJeopardy, renderPicker } from './games/jeopardy';
 import { initOutburst, renderOutburst, stopOutburstTimer } from './games/outburst';
@@ -25,6 +25,16 @@ function finishGame(): void {
   stopAllTimers();
   const ended = endGame(night);
   if (ended) showResults(ended);
+}
+
+const turnsText = (n: number) => `${n} turn${n === 1 ? '' : 's'}`;
+
+/** Who is short of turns, e.g. "El Captains: 2 turns, the others: 3." Names
+ *  the one entity ahead when there is only one. */
+function unevenMessage(u: NonNullable<ReturnType<typeof unevenTurns>>): string {
+  const short = u.short.map((s) => `${escapeHtml(s.entity.name)}: ${turnsText(s.turns)}`).join(', ');
+  const ahead = u.ahead.length === 1 ? escapeHtml(u.ahead[0].name) : 'the others';
+  return `${short}, ${ahead}: ${u.most}.`;
 }
 
 /** Launch a game that awards points. It needs somebody to award them to, and
@@ -88,7 +98,11 @@ function main(): void {
   $('endGameBtn').addEventListener('click', async () => {
     const game = gameInProgress(night);
     if (!game) return;
-    if (await confirmBox(`End ${GAME_NAMES[game.type]} now?`, 'End game')) finishGame();
+    const uneven = unevenTurns(night);
+    const ok = uneven
+      ? await confirmBox(`${unevenMessage(uneven)} End anyway?`, 'End anyway')
+      : await confirmBox(`End ${GAME_NAMES[game.type]} now?`, 'End game');
+    if (ok) finishGame();
   });
 
   show('screen-home');

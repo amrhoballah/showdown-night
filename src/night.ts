@@ -50,6 +50,10 @@ export type GameScores = Record<EntityId, number>;
 export interface GameInProgress {
   type: GameType;
   scores: GameScores;
+  /** Confirmed turns by entity id, in games that have turns. */
+  turns: Record<EntityId, number>;
+  /** Who took the most recent turn, so ties for the next turn rotate. */
+  lastTurn: EntityId | null;
 }
 
 export interface FinishedGame {
@@ -161,7 +165,7 @@ export function gameInProgress(night: Night): GameInProgress | null {
  *  progress, or when there is nobody to play it. */
 export function startGame(night: Night, type: GameType): boolean {
   if (night.current || entitiesOf(night).length === 0) return false;
-  night.current = { type, scores: {} };
+  night.current = { type, scores: {}, turns: {}, lastTurn: null };
   return true;
 }
 
@@ -203,6 +207,63 @@ export function endGame(night: Night): EndedGame | null {
 
 export function finishedGames(night: Night): FinishedGame[] {
   return night.games;
+}
+
+// ---------- turns ----------
+
+/** Games where each round belongs to one entity. Emoji and Jeopardy are
+ *  open buzz-in, so they have none (and a Daily Double isn't a turn). */
+const TURN_GAMES: ReadonlySet<GameType> = new Set(['wavelength', 'act', 'outburst']);
+
+export function hasTurns(type: GameType): boolean {
+  return TURN_GAMES.has(type);
+}
+
+/** Record a turn for an entity once the host confirms its round's result,
+ *  even at 0 points. Does nothing outside a game with turns. */
+export function confirmTurn(night: Night, id: EntityId): void {
+  const game = night.current;
+  if (!game || !hasTurns(game.type)) return;
+  game.turns[id] = turnsOf(night, id) + 1;
+  game.lastTurn = id;
+}
+
+/** An entity's confirmed turns in the game in progress. */
+export function turnsOf(night: Night, id: EntityId): number {
+  return night.current?.turns[id] ?? 0;
+}
+
+/** Who should take the next turn: the entity with the fewest turns. Ties go
+ *  to the first of them after whoever took the last turn, in entity order, so
+ *  an even game rotates. Null when no game with turns is in progress. */
+export function nextTurn(night: Night): EntityId | null {
+  const game = night.current;
+  const ents = entitiesOf(night);
+  if (!game || !hasTurns(game.type) || ents.length === 0) return null;
+  const fewest = Math.min(...ents.map((e) => turnsOf(night, e.id)));
+  const start = ents.findIndex((e) => e.id === game.lastTurn) + 1;
+  for (let k = 0; k < ents.length; k++) {
+    const e = ents[(start + k) % ents.length];
+    if (turnsOf(night, e.id) === fewest) return e.id;
+  }
+  return null;
+}
+
+/** Who is short of turns, for the End game warning: every entity below the
+ *  most turns anyone has had, with its count. Null when turns are even or the
+ *  game has no turns. */
+export function unevenTurns(
+  night: Night,
+): { short: { entity: NightEntity; turns: number }[]; ahead: NightEntity[]; most: number } | null {
+  const game = night.current;
+  if (!game || !hasTurns(game.type)) return null;
+  const ents = entitiesOf(night);
+  const most = Math.max(0, ...ents.map((e) => turnsOf(night, e.id)));
+  const short = ents
+    .filter((e) => turnsOf(night, e.id) < most)
+    .map((entity) => ({ entity, turns: turnsOf(night, entity.id) }));
+  if (short.length === 0) return null;
+  return { short, ahead: ents.filter((e) => turnsOf(night, e.id) === most), most };
 }
 
 // ---------- corrections ----------

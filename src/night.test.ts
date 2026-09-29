@@ -17,6 +17,10 @@ import {
   placement,
   setGameScore,
   earnedIn,
+  confirmTurn,
+  turnsOf,
+  nextTurn,
+  unevenTurns,
   TEAM_COLORS,
   TEAM_NAME_DEFAULTS,
   type Night,
@@ -283,6 +287,137 @@ describe('score corrections', () => {
     const salma = addPlayer(n, 'Salma');
     expect(setGameScore(n, 0, salma.id, 5)).toBe('not-in-game');
     expect(totals(n)).toEqual([6, 12, 0]);
+  });
+});
+
+describe('turns', () => {
+  /** Confirm a round for each named entity, in order. */
+  const turns = (n: Night, ...who: number[]) =>
+    who.forEach((i) => confirmTurn(n, entitiesOf(n)[i].id));
+  const counts = (n: Night) => entitiesOf(n).map((e) => turnsOf(n, e.id));
+  const nextIndex = (n: Night) => entitiesOf(n).findIndex((e) => e.id === nextTurn(n));
+
+  it('count confirmed rounds in Wavelength, Act It Out and Outburst, including 0-point rounds', () => {
+    for (const type of ['wavelength', 'act', 'outburst'] as const) {
+      const n = newNight();
+      setTeams(n, 2);
+      startGame(n, type);
+      turns(n, 0, 1, 0);
+      expect(counts(n)).toEqual([2, 1]);
+      expect(gameScores(n)).toEqual([0, 0]);
+    }
+  });
+
+  it('do not exist in Emoji or Jeopardy', () => {
+    for (const type of ['emoji', 'jeopardy'] as const) {
+      const n = newNight();
+      setTeams(n, 2);
+      startGame(n, type);
+      turns(n, 0, 0);
+      expect(counts(n)).toEqual([0, 0]);
+      expect(nextTurn(n)).toBeNull();
+      expect(unevenTurns(n)).toBeNull();
+    }
+  });
+
+  it('are untouched by awards and by corrections', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'wavelength');
+    const [a] = entitiesOf(n);
+    award(n, a.id, 4);
+    setGameScore(n, 'current', a.id, 9);
+    expect(counts(n)).toEqual([0, 0]);
+  });
+
+  it('start again with each new game', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'act');
+    turns(n, 0);
+    endGame(n);
+    startGame(n, 'act');
+    expect(counts(n)).toEqual([0, 0]);
+  });
+
+  describe('the next turn', () => {
+    it('rotates through the entities in order when turns are even', () => {
+      const n = newNight();
+      setTeams(n, 3);
+      startGame(n, 'wavelength');
+      const order: number[] = [];
+      for (let k = 0; k < 6; k++) {
+        order.push(nextIndex(n));
+        turns(n, nextIndex(n));
+      }
+      expect(order).toEqual([0, 1, 2, 0, 1, 2]);
+    });
+
+    it('goes to whoever has had the fewest turns after the host overrides', () => {
+      const n = newNight();
+      setTeams(n, 3);
+      startGame(n, 'outburst');
+      turns(n, 0, 0, 1); // the host picked the first team twice
+      expect(nextIndex(n)).toBe(2);
+      turns(n, 2);
+      expect(nextIndex(n)).toBe(1);
+    });
+
+    it('breaks a tie with the first entity after the last turn, wrapping round', () => {
+      const n = newNight();
+      setTeams(n, 4);
+      startGame(n, 'act');
+      turns(n, 2);
+      expect(nextIndex(n)).toBe(3);
+      turns(n, 3);
+      expect(nextIndex(n)).toBe(0);
+    });
+
+    it('works per player in free-for-all', () => {
+      const n = newNight();
+      setFreeForAll(n);
+      ['Karim', 'Hana', 'Salma'].forEach((p) => addPlayer(n, p));
+      startGame(n, 'act');
+      turns(n, 1);
+      expect(entitiesOf(n)[nextIndex(n)].name).toBe('Salma');
+      turns(n, 2);
+      expect(entitiesOf(n)[nextIndex(n)].name).toBe('Karim');
+    });
+  });
+
+  describe('uneven turns', () => {
+    it('are reported whenever anyone is behind the most turns, naming who is short', () => {
+      const n = newNight();
+      setTeams(n, 3);
+      startGame(n, 'wavelength');
+      turns(n, 0, 1, 2, 0, 2);
+      const u = unevenTurns(n)!;
+      expect(u.most).toBe(2);
+      expect(u.short.map((s) => [s.entity.name, s.turns])).toEqual([[TEAM_NAME_DEFAULTS[1], 1]]);
+      expect(u.ahead.map((e) => e.name)).toEqual([TEAM_NAME_DEFAULTS[0], TEAM_NAME_DEFAULTS[2]]);
+    });
+
+    it('are not reported when turns are even, including before anyone has played', () => {
+      const n = newNight();
+      setTeams(n, 2);
+      startGame(n, 'act');
+      expect(unevenTurns(n)).toBeNull();
+      turns(n, 0, 1);
+      expect(unevenTurns(n)).toBeNull();
+    });
+
+    it('list every player who is short in free-for-all', () => {
+      const n = newNight();
+      setFreeForAll(n);
+      ['Karim', 'Hana', 'Salma', 'Omar'].forEach((p) => addPlayer(n, p));
+      startGame(n, 'wavelength');
+      turns(n, 0, 1, 0);
+      expect(unevenTurns(n)!.short.map((s) => [s.entity.name, s.turns])).toEqual([
+        ['Hana', 1],
+        ['Salma', 0],
+        ['Omar', 0],
+      ]);
+    });
   });
 });
 

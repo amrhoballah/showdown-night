@@ -8,7 +8,7 @@
 
 import type { Spectrum } from '../types';
 import { SPECTRA } from '../data/spectra';
-import { entities, award } from '../scoreboard';
+import { entities, award, recordTurn, nextTurnIndex } from '../scoreboard';
 import { $, show, escapeHtml, shuffle, onClickAll, dataNum } from '../ui';
 
 const wave = {
@@ -17,6 +17,7 @@ const wave = {
   phase: 'handoff' as 'handoff' | 'target' | 'guess' | 'result',
   target: 5,
   guess: 0,
+  /** The guessing team for this round, chosen at the hand-off. */
   teamIdx: 0,
 };
 
@@ -48,6 +49,8 @@ export function renderWave(): void {
   $('waveProgress').textContent = `Round ${wave.idx + 1}`;
 
   if (wave.phase === 'handoff') {
+    // Whoever has had the fewest turns guesses next; the host can change it.
+    wave.teamIdx = nextTurnIndex();
     card.innerHTML =
       `<p class="kicker">Wavelength &middot; round ${wave.idx + 1}</p>` +
       '<h2>Pick a clue-giver and pass them the laptop.</h2>' +
@@ -145,10 +148,11 @@ export function renderWave(): void {
       pts ? `Add ${pts} to ${escapeHtml(name)}` : 'Next round'
     }</button></div>`;
 
+  // Confirming the result is the turn, even at 0 points.
   $('waveAward').addEventListener('click', () => {
     if (pts) award(wave.teamIdx, pts);
+    recordTurn(wave.teamIdx);
     wave.idx++;
-    wave.teamIdx = (wave.teamIdx + 1) % Math.max(1, entities().length);
     wave.phase = 'handoff';
     renderWave();
   });

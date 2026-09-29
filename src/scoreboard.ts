@@ -23,6 +23,8 @@ import {
   finishedGames,
   setGameScore,
   earnedIn,
+  confirmTurn,
+  nextTurn,
   award as awardInNight,
   type Mode,
   type EntityId,
@@ -258,6 +260,18 @@ export function initScoreboard(): void {
     renderScoreboard();
     renderPanel();
   });
+}
+
+/** Record a confirmed turn for the entity at index `i` (even a 0-point one). */
+export function recordTurn(i: number): void {
+  const e = entitiesOf(night)[i];
+  if (e) confirmTurn(night, e.id);
+}
+
+/** Index of the entity whose turn is next (fewest turns), 0 if none. */
+export function nextTurnIndex(): number {
+  const id = nextTurn(night);
+  return Math.max(0, entitiesOf(night).findIndex((e) => e.id === id));
 }
 
 /** Add (or, with a negative value, subtract) points for the entity at index

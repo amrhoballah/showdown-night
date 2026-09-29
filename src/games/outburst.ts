@@ -1,21 +1,28 @@
 /** Game 2 - Outburst.
  *
- *  The category stays hidden until the clock starts, so the shared TV screen
- *  never leaks the answers. Everyone shouts for 60 seconds, the list reveals at
- *  the buzzer, and the group tallies how many they actually said (honour
- *  system - the listed items are examples, so award generously for anything in
- *  the same spirit).
+ *  One team per round: the team whose turn it is shouts, and is credited. The
+ *  category stays hidden until the clock starts, so the shared TV screen never
+ *  leaks the answers. That team shouts for 60 seconds, the list reveals at the
+ *  buzzer, and the room tallies how many they actually said (honour system -
+ *  the listed items are examples, so award generously for anything in the same
+ *  spirit).
  */
 
 import { OUTBURST } from '../data/outburst';
-import { entities, award } from '../scoreboard';
+import { entities, award, recordTurn, nextTurnIndex } from '../scoreboard';
 import { $, show, escapeHtml } from '../ui';
 
 const ob = {
   index: 0,
   secondsLeft: 60,
   timer: 0 as number,
+  /** The team shouting this round, chosen before the clock starts. */
+  teamIdx: 0,
 };
+
+function teamName(): string {
+  return escapeHtml(entities()[ob.teamIdx]?.name ?? 'your team');
+}
 
 export function stopOutburstTimer(): void {
   clearInterval(ob.timer);
@@ -25,16 +32,32 @@ export function renderOutburst(): void {
   const round = OUTBURST[ob.index];
   $('obProgress').textContent = `Round ${ob.index + 1} of ${OUTBURST.length}`;
   const card = $('obCard');
+  const ents = entities();
+  // Whoever has had the fewest turns shouts next; the host can change it.
+  const next = nextTurnIndex();
 
   card.innerHTML =
     `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${OUTBURST.length}</p>` +
     '<h2 class="ob-cat">Ready when you are.</h2>' +
-    '<p class="sub">The category stays hidden until you start the clock. One person shouts ' +
-    '&ldquo;go,&rdquo; everyone else calls out anything that fits &mdash; no wrong guesses, just ' +
+    '<p class="sub">The category stays hidden until you start the clock. Someone shouts ' +
+    '&ldquo;go,&rdquo; and your team calls out anything that fits &mdash; no wrong guesses, just ' +
     'keep going until the buzzer.</p>' +
+    '<p class="sub">Whose turn?</p>' +
+    '<select id="obTeamSelect" style="background:var(--bg-raised-2);color:var(--ink);' +
+    'border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:inherit;font-size:0.95rem;">' +
+    ents
+      .map(
+        (e, i) =>
+          `<option value="${i}"${i === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
+      )
+      .join('') +
+    '</select>' +
     '<button class="btn" id="obStartBtn">Reveal category &amp; start 60s</button>';
 
-  $('obStartBtn').addEventListener('click', () => startRound(round));
+  $('obStartBtn').addEventListener('click', () => {
+    ob.teamIdx = Number(($('obTeamSelect') as HTMLSelectElement).value);
+    startRound(round);
+  });
 }
 
 function startRound(round: (typeof OUTBURST)[number]): void {
@@ -45,7 +68,7 @@ function startRound(round: (typeof OUTBURST)[number]): void {
     `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${OUTBURST.length}</p>` +
     `<h2 class="ob-cat">${escapeHtml(round.cat)}</h2>` +
     '<div class="timer" id="obTimerEl">60</div>' +
-    '<p class="sub">Shout out as many as you can. The list reveals the second the clock hits zero.</p>' +
+    `<p class="sub">${teamName()}: shout out as many as you can. The list reveals the second the clock hits zero.</p>` +
     "<button class=\"btn ghost\" id=\"obStopBtn\">Time's up &mdash; reveal now</button>";
 
   $('obStopBtn').addEventListener('click', finishTimer);
@@ -73,8 +96,8 @@ function finishTimer(): void {
     '<div class="ob-answers">' +
     round.items.map((it) => `<div class="ob-answer">${escapeHtml(it)}</div>`).join('') +
     '</div>' +
-    '<p class="sub">Talk it over: how many of these did the group actually call out? Pick a team, ' +
-    'set the count, and add the points (1 point each).</p>' +
+    `<p class="sub">Talk it over: how many of these did ${teamName()} actually call out? ` +
+    'Set the count and add the points (1 point each).</p>' +
     '<div id="obTallyWrap"></div>';
 
   buildTally();
@@ -82,15 +105,11 @@ function finishTimer(): void {
 
 function buildTally(): void {
   const wrap = $('obTallyWrap');
-  const ents = entities();
   let count = 0;
 
   wrap.innerHTML =
     '<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">' +
-    '<select id="obTeamSelect" style="background:var(--bg-raised-2);color:var(--ink);' +
-    'border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:inherit;font-size:0.95rem;">' +
-    ents.map((e, i) => `<option value="${i}">${escapeHtml(e.name)}</option>`).join('') +
-    '</select>' +
+    `<p class="sub" style="margin:0;">For <strong>${teamName()}</strong></p>` +
     '<div class="tally"><button id="obMinus" aria-label="fewer">&minus;</button>' +
     '<span class="n mono" id="obCount">0</span>' +
     '<button id="obPlus" aria-label="more">+</button></div>' +
@@ -106,8 +125,10 @@ function buildTally(): void {
     count = Math.min(OUTBURST[ob.index].items.length, count + 1);
     countEl.textContent = String(count);
   });
+  // Adding the points confirms the team's turn, even at 0.
   $('obAwardBtn').addEventListener('click', () => {
-    award(Number(($('obTeamSelect') as HTMLSelectElement).value), count);
+    award(ob.teamIdx, count);
+    recordTurn(ob.teamIdx);
     ob.index++;
     if (ob.index >= OUTBURST.length) {
       $('obCard').innerHTML =
