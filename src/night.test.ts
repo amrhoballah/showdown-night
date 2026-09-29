@@ -27,6 +27,13 @@ import {
   hideDailyDouble,
   useClue,
   settleFinal,
+  setupLocked,
+  addTeam,
+  removePlayer as remove,
+  leave,
+  back,
+  leftOf,
+  allEntitiesOf,
   serialize,
   deserialize,
   TEAM_COLORS,
@@ -228,13 +235,6 @@ describe('Jeopardy boards', () => {
     expect(startGame(n, 'jeopardy', 'ar')).toBe(false);
   });
 
-  it('are fresh again once the night is cleared', () => {
-    const n = newNight();
-    setTeams(n, 2);
-    play(n, 'jeopardy', [1, 0], 'en');
-    setTeams(n, 3);
-    expect(boardStatus(n, 'en')).toBe('fresh');
-  });
 });
 
 describe('Jeopardy board progress', () => {
@@ -254,11 +254,10 @@ describe('Jeopardy board progress', () => {
   it('starts fresh whenever a board starts a game', () => {
     const n = newNight();
     setTeams(n, 2);
+    boardProgress(n, 'en').used.push('0-0');
+    hideDailyDouble(n, 'en', '1-1');
     startGame(n, 'jeopardy', 'en');
-    useClue(n, 'en', '0-0');
-    setTeams(n, 3); // clears the night, so the board is fresh again
-    startGame(n, 'jeopardy', 'en');
-    expect(boardProgress(n, 'en').used).toEqual([]);
+    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false });
   });
 });
 
@@ -311,7 +310,7 @@ describe('the saved night', () => {
     const back = deserialize(serialize(busyNight()));
     endGame(back);
     expect(finishedGames(back)).toHaveLength(3);
-    expect(addPlayer(back, 'Omar').id).toBeGreaterThan(Math.max(...back.players.slice(0, 3).map((p) => p.id)));
+    expect(addPlayer(back, 'Omar')!.id).toBeGreaterThan(Math.max(...back.players.slice(0, 3).map((p) => p.id)));
   });
 
   it.each([
@@ -325,6 +324,166 @@ describe('the saved night', () => {
     ['a non-whole score', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'emoji', entityIds: [1], scores: { 1: 1.5 } }] } })],
   ])('falls back to a fresh night for %s', (_, data) => {
     expect(deserialize(data)).toEqual(newNight());
+  });
+});
+
+describe('changing the setup mid-night', () => {
+  it('is free before anything has been played', () => {
+    const n = newNight();
+    expect(setupLocked(n)).toBe(false);
+    expect(setTeams(n, 3)).toBe(true);
+    expect(setFreeForAll(n)).toBe(true);
+    const karim = addPlayer(n, 'Karim')!;
+    addPlayer(n, 'Hana');
+    expect(remove(n, karim.id)).toBe(true);
+    expect(names(n)).toEqual(['Hana']);
+  });
+
+  it('locks the mode and team count from the first finished game', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    play(n, 'emoji', [3, 1]);
+    expect(setupLocked(n)).toBe(true);
+    expect(setTeams(n, 3)).toBe(false);
+    expect(setFreeForAll(n)).toBe(false);
+    expect(n.mode).toBe('teams');
+    expect(names(n)).toHaveLength(2);
+    expect(totals(n)).toEqual([13, 6]);
+  });
+
+  it('locks the mode while a game is in progress, even before any has finished', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'emoji');
+    expect(setTeams(n, 4)).toBe(false);
+    expect(setFreeForAll(n)).toBe(false);
+  });
+
+  it('allows renaming any time, mid-game included, keeping results', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    play(n, 'emoji', [3, 1]);
+    startGame(n, 'wavelength');
+    const [a] = entitiesOf(n);
+    award(n, a.id, 4);
+    rename(n, a.id, 'Pharaohs');
+    expect(names(n)[0]).toBe('Pharaohs');
+    expect(gameScoreOf(n, a.id)).toBe(4);
+    expect(totals(n)).toEqual([13, 6]);
+  });
+
+  it('lets a team join at 0 between games, earning from the next game', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    play(n, 'emoji', [3, 1]);
+    const late = addTeam(n)!;
+    expect(late.name).toBe(TEAM_NAME_DEFAULTS[2]);
+    expect(totals(n)).toEqual([13, 6, 0]);
+    expect(finishedGames(n)[0].entityIds).not.toContain(late.id);
+    play(n, 'emoji', [0, 0, 5]);
+    expect(totals(n)).toEqual([13 + 3, 6 + 3, 15]);
+  });
+
+  it('adds no more than 4 teams, and nobody mid-game', () => {
+    const n = newNight();
+    setTeams(n, 3);
+    expect(addTeam(n)).not.toBeNull();
+    expect(addTeam(n)).toBeNull();
+    const m = newNight();
+    setFreeForAll(m);
+    ['Karim', 'Hana'].forEach((p) => addPlayer(m, p));
+    startGame(m, 'emoji');
+    expect(addPlayer(m, 'Salma')).toBeNull();
+    expect(names(m)).toEqual(['Karim', 'Hana']);
+  });
+
+  it('removes nobody outright once a game has been played', () => {
+    const n = newNight();
+    setFreeForAll(n);
+    const karim = addPlayer(n, 'Karim')!;
+    addPlayer(n, 'Hana');
+    play(n, 'emoji', [1, 4]);
+    expect(remove(n, karim.id)).toBe(false);
+    expect(allEntitiesOf(n)).toHaveLength(2);
+  });
+
+  describe('Left', () => {
+    function nightOfThree(): Night {
+      const n = newNight();
+      setFreeForAll(n);
+      ['Karim', 'Hana', 'Salma'].forEach((p) => addPlayer(n, p));
+      play(n, 'emoji', [5, 3, 2]); // 10 / 6 / 3
+      return n;
+    }
+
+    it('keeps everyone else\'s placement points unchanged', () => {
+      const n = nightOfThree();
+      const salma = entitiesOf(n)[2];
+      expect(leave(n, salma.id)).toBeNull();
+      expect(standings(n).map((s) => [s.entity.name, s.total])).toEqual([
+        ['Karim', 10],
+        ['Hana', 6],
+      ]);
+      expect(earnedIn(n, 0)[salma.id]).toBe(3);
+    });
+
+    it('drops off the standings and out of future games, but stays correctable', () => {
+      const n = nightOfThree();
+      const salma = entitiesOf(n)[2];
+      leave(n, salma.id);
+      expect(leftOf(n).map((e) => e.name)).toEqual(['Salma']);
+      const ended = (startGame(n, 'emoji'), endGame(n))!;
+      expect(ended.gameScores.map((g) => g.entity.name)).toEqual(['Karim', 'Hana']);
+      expect(ended.after.map((s) => s.entity.name)).not.toContain('Salma');
+      expect(setGameScore(n, 0, salma.id, 4)).toBeNull();
+      expect(earnedIn(n, 0)[salma.id]).toBeGreaterThan(3);
+    });
+
+    it('comes Back with everything it had, having missed the games meanwhile', () => {
+      const n = nightOfThree();
+      const salma = entitiesOf(n)[2];
+      leave(n, salma.id);
+      play(n, 'emoji', [2, 0]);
+      expect(back(n, salma.id)).toBeNull();
+      expect(names(n)).toEqual(['Karim', 'Hana', 'Salma']);
+      expect(totals(n)[2]).toBe(3);
+      expect(leftOf(n)).toEqual([]);
+    });
+
+    it('is refused mid-game, and so is coming back', () => {
+      const n = nightOfThree();
+      const [karim, , salma] = entitiesOf(n);
+      leave(n, salma.id);
+      startGame(n, 'emoji');
+      expect(leave(n, karim.id)).toBe('in-game');
+      expect(back(n, salma.id)).toBe('in-game');
+      expect(names(n)).toEqual(['Karim', 'Hana']);
+    });
+
+    it('is reported, not applied, when fewer than 2 would be left', () => {
+      const n = nightOfThree();
+      const [karim, hana] = entitiesOf(n);
+      expect(leave(n, karim.id)).toBeNull();
+      expect(leave(n, hana.id)).toBe('would-end-night');
+      expect(names(n)).toEqual(['Hana', 'Salma']);
+    });
+
+    it('works for teams as well as players', () => {
+      const n = newNight();
+      setTeams(n, 3);
+      play(n, 'emoji', [1, 2, 3]);
+      const [a] = entitiesOf(n);
+      expect(leave(n, a.id)).toBeNull();
+      expect(names(n)).toEqual([TEAM_NAME_DEFAULTS[1], TEAM_NAME_DEFAULTS[2]]);
+    });
+
+    it('is kept in the saved night', () => {
+      const n = nightOfThree();
+      leave(n, entitiesOf(n)[1].id);
+      const saved = deserialize(serialize(n));
+      expect(saved).toEqual(n);
+      expect(leftOf(saved).map((e) => e.name)).toEqual(['Hana']);
+    });
   });
 });
 
@@ -365,18 +524,6 @@ describe('night standings', () => {
     ]);
   });
 
-  it('are all cleared when the mode or team count changes', () => {
-    const n = newNight();
-    setTeams(n, 2);
-    play(n, 'emoji', [6, 4]);
-    setTeams(n, 3);
-    expect(totals(n)).toEqual([0, 0, 0]);
-    startGame(n, 'emoji');
-    setFreeForAll(n);
-    expect(gameInProgress(n)).toBeNull();
-    setTeams(n, 3);
-    expect(totals(n)).toEqual([0, 0, 0]);
-  });
 });
 
 describe('score corrections', () => {
@@ -444,7 +591,7 @@ describe('score corrections', () => {
     expect(setGameScore(n, 'current', karim.id, 1)).toBe('no-game');
     expect(setGameScore(n, 3, karim.id, 1)).toBe('no-game');
     play(n, 'emoji', [1, 2]);
-    const salma = addPlayer(n, 'Salma');
+    const salma = addPlayer(n, 'Salma')!;
     expect(setGameScore(n, 0, salma.id, 5)).toBe('not-in-game');
     expect(totals(n)).toEqual([6, 12, 0]);
   });
@@ -657,23 +804,11 @@ describe('free-for-all', () => {
     expect(totals(n)).toEqual([13, 6, 0]);
   });
 
-  it('clears the whole night when a player is removed, as before', () => {
-    const n = newNight();
-    setFreeForAll(n);
-    const karim = addPlayer(n, 'Karim');
-    addPlayer(n, 'Hana');
-    play(n, 'emoji', [1, 4]);
-    removePlayer(n, karim.id);
-    expect(names(n)).toEqual(['Hana']);
-    expect(totals(n)).toEqual([0]);
-    expect(finishedGames(n)).toEqual([]);
-  });
-
   it('keeps a player’s colour when someone before them is removed', () => {
     const n = newNight();
     setFreeForAll(n);
-    const karim = addPlayer(n, 'Karim');
-    const hana = addPlayer(n, 'Hana');
+    const karim = addPlayer(n, 'Karim')!;
+    const hana = addPlayer(n, 'Hana')!;
     const before = hana.color;
     removePlayer(n, karim.id);
     expect(entitiesOf(n)[0].color).toBe(before);

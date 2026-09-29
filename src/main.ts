@@ -4,7 +4,7 @@ import './styles.css';
 import { $, show, confirmBox, escapeHtml, onScreenChange, type ScreenId } from './ui';
 import { night, renderScoreboard, initScoreboard, loadNight, startNewNight } from './scoreboard';
 import { startGame, endGame, gameInProgress, unevenTurns, type GameType } from './night';
-import { initSetup, flashNeedMode, hasPlayers, refreshSetup } from './setup';
+import { initSetup, flashNeedMode, hasPlayers, refreshSetup, onNightCantGoOn } from './setup';
 import { showContinue, hasNightToContinue } from './continue';
 import {
   initJeopardy,
@@ -116,18 +116,22 @@ async function launchScoring(type: GameType): Promise<void> {
   }
 }
 
+/** Clear the night and start a fresh one on Home. */
+function clearNight(): void {
+  stopAllTimers();
+  startNewNight();
+  refreshSetup();
+  show('screen-home');
+}
+
 /** Ask before clearing the night; on yes, start a fresh one on Home. */
 async function newNight(): Promise<boolean> {
   const yes = await confirmBox(
     'This clears tonight&rsquo;s standings and every finished game. Start a new night?',
     'Start a new night',
   );
-  if (!yes) return false;
-  stopAllTimers();
-  startNewNight();
-  refreshSetup();
-  show('screen-home');
-  return true;
+  if (yes) clearNight();
+  return yes;
 }
 
 /** Continue the saved night: back into the game in progress, at the step
@@ -162,11 +166,14 @@ function main(): void {
     btn.addEventListener('click', () => launchScoring(type));
   });
   onScreenChange((id) => {
-    if (id === 'screen-home') renderLaunchCards();
+    if (id !== 'screen-home') return;
+    renderLaunchCards();
+    // Locks, Left controls and adding depend on whether a game is in progress.
+    refreshSetup();
   });
+  // A leave that would drop below 2 has already been confirmed as ending the night.
+  onNightCantGoOn(clearNight);
   onEndGame(() => finishGame());
-  // A mode or team-count change clears the night, including the game in progress.
-  $('modeGrid').addEventListener('click', renderLaunchCards);
 
   // Mafia runs its own player list, so it never needs the scoreboard setup.
   $('launchMafia').addEventListener('click', () => {

@@ -10,8 +10,9 @@
  *  from the finished games - never stored - so the game in progress counts
  *  for nothing until it ends.
  *
- *  Setup changes still clear the whole night (every game) when the mode or
- *  team count changes or a player is removed, as the old scoreboard did.
+ *  Setup changes never touch results: the mode is locked once a game has
+ *  finished, latecomers join at 0, and an entity who goes home is marked Left
+ *  and keeps its past results.
  */
 
 import type { Lang } from './types';
@@ -43,6 +44,9 @@ export interface NightEntity {
   id: EntityId;
   name: string;
   color: string;
+  /** Dropped out of the night: kept in the games it played, off the
+   *  standings and out of future games until it comes back. */
+  left?: boolean;
 }
 
 /** Game scores by entity id. A missing id scores 0. */
@@ -137,55 +141,111 @@ function create(night: Night, name: string, slot: number): NightEntity {
   return { id: night.nextId++, name, color: TEAM_COLORS[slot % TEAM_COLORS.length] };
 }
 
-function clearGames(night: Night): void {
-  night.games = [];
-  night.current = null;
-}
-
 // ---------- setup ----------
+
+/** The mode and team count are locked once a game has finished (until New
+ *  night), so results can't be scrambled across modes; and while a game is in
+ *  progress. Before that, setup is free. */
+export function setupLocked(night: Night): boolean {
+  return night.games.length > 0 || !!night.current;
+}
 
 /** Switch to team mode with `count` teams. Existing teams keep their names and
  *  colours; extra slots get the default names; surplus teams are dropped.
- *  Clears every game. */
-export function setTeams(night: Night, count: number): void {
+ *  Refused (false) once setup is locked. */
+export function setTeams(night: Night, count: number): boolean {
+  if (setupLocked(night)) return false;
   night.mode = 'teams';
   night.teams = Array.from(
     { length: count },
     (_, i) => night.teams[i] ?? create(night, TEAM_NAME_DEFAULTS[i % TEAM_NAME_DEFAULTS.length], i),
   );
-  clearGames(night);
+  return true;
 }
 
-/** Switch to free-for-all. The player list is kept. Clears every game. */
-export function setFreeForAll(night: Night): void {
+/** Switch to free-for-all. The player list is kept. Refused once setup is locked. */
+export function setFreeForAll(night: Night): boolean {
+  if (setupLocked(night)) return false;
   night.mode = 'ffa';
-  clearGames(night);
+  return true;
 }
 
-/** Add a free-for-all player at 0. Everyone else keeps their results. */
-export function addPlayer(night: Night, name: string): NightEntity {
+/** Add a free-for-all player at 0: absent from the finished games, earning
+ *  from the next. Refused (null) while a game is in progress. */
+export function addPlayer(night: Night, name: string): NightEntity | null {
+  if (night.current) return null;
   const p = create(night, name, night.players.length);
   night.players.push(p);
   return p;
 }
 
-/** Remove a free-for-all player. Clears every game, as it always has. */
-export function removePlayer(night: Night, id: EntityId): void {
-  night.players = night.players.filter((p) => p.id !== id);
-  clearGames(night);
+/** Add a team at 0, between games, up to 4 teams (counting any who left).
+ *  Refused (null) outside team mode, mid-game or at 4. */
+export function addTeam(night: Night): NightEntity | null {
+  if (night.current || night.mode !== 'teams' || night.teams.length >= TEAM_NAME_DEFAULTS.length) {
+    return null;
+  }
+  const i = night.teams.length;
+  const t = create(night, TEAM_NAME_DEFAULTS[i], i);
+  night.teams.push(t);
+  return t;
 }
 
-/** Rename a team or player. Its results and colour are untouched. */
+/** Remove a free-for-all player outright. Only while setup is still free
+ *  (nothing played): after that, a player who goes home is marked Left. */
+export function removePlayer(night: Night, id: EntityId): boolean {
+  if (setupLocked(night)) return false;
+  night.players = night.players.filter((p) => p.id !== id);
+  return true;
+}
+
+/** Rename a team or player, any time. Its results and colour are untouched. */
 export function rename(night: Night, id: EntityId, name: string): void {
-  const e = [...night.teams, ...night.players].find((x) => x.id === id);
+  const e = allEntitiesOf(night).find((x) => x.id === id);
   if (e) e.name = name;
 }
 
-/** The current scoring units, in order: the teams, or the players. None before a mode is chosen. */
-export function entitiesOf(night: Night): NightEntity[] {
+/** Why a leave or a return was refused: mid-game, or (for a leave) because
+ *  fewer than 2 would be left, so the night can't go on. */
+export type LeaveRefusal = 'in-game' | 'would-end-night';
+
+/** Mark an entity as Left, between games. It keeps its results in the games
+ *  it played, so nobody else's placement points change, but drops off the
+ *  standings and future games. Returns why it was refused, or null. A leave
+ *  that would leave fewer than 2 is reported, not applied. */
+export function leave(night: Night, id: EntityId): LeaveRefusal | null {
+  if (night.current) return 'in-game';
+  const e = entitiesOf(night).find((x) => x.id === id);
+  if (!e) return null;
+  if (entitiesOf(night).length - 1 < 2) return 'would-end-night';
+  e.left = true;
+  return null;
+}
+
+/** Bring a Left entity back with everything it had, between games. */
+export function back(night: Night, id: EntityId): LeaveRefusal | null {
+  if (night.current) return 'in-game';
+  const e = leftOf(night).find((x) => x.id === id);
+  if (e) delete e.left;
+  return null;
+}
+
+/** Every team or player in the current mode, Left ones included, in order. */
+export function allEntitiesOf(night: Night): NightEntity[] {
   if (night.mode === 'teams') return night.teams;
   if (night.mode === 'ffa') return night.players;
   return [];
+}
+
+/** The current scoring units, in order: the teams, or the players, who
+ *  haven't left. None before a mode is chosen. */
+export function entitiesOf(night: Night): NightEntity[] {
+  return allEntitiesOf(night).filter((e) => !e.left);
+}
+
+/** The entities who have left, in order. */
+export function leftOf(night: Night): NightEntity[] {
+  return allEntitiesOf(night).filter((e) => e.left);
 }
 
 // ---------- play ----------
@@ -458,7 +518,13 @@ const GAME_TYPES: readonly unknown[] = ['jeopardy', 'outburst', 'act', 'emoji', 
 const BOARDS: readonly unknown[] = ['en', 'ar'];
 
 function isEntity(x: unknown): boolean {
-  return isObj(x) && isInt(x.id) && typeof x.name === 'string' && typeof x.color === 'string';
+  return (
+    isObj(x) &&
+    isInt(x.id) &&
+    typeof x.name === 'string' &&
+    typeof x.color === 'string' &&
+    (x.left === undefined || typeof x.left === 'boolean')
+  );
 }
 
 function isGame(x: unknown): boolean {

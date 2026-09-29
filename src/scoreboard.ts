@@ -17,6 +17,7 @@ import type { Entity } from './types';
 import {
   newNight,
   entitiesOf,
+  allEntitiesOf,
   gameInProgress,
   gameScoreOf,
   standings,
@@ -95,7 +96,7 @@ export const state = {
   },
   /** Names only, for Mafia's pre-filled player list. */
   get ffaPlayers(): { name: string }[] {
-    return night.players.map((p) => ({ name: p.name }));
+    return night.players.filter((p) => !p.left).map((p) => ({ name: p.name }));
   },
   get scores(): number[] {
     return entitiesOf(night).map((e) => gameScoreOf(night, e.id));
@@ -188,6 +189,11 @@ function openPanel(id: EntityId): void {
   renderPanel();
 }
 
+/** Open an entity's finished games for correction, e.g. from the Left list. */
+export function openCorrections(id: EntityId): void {
+  openPanel(id);
+}
+
 function closePanel(): void {
   panelFor = null;
   renderPanel();
@@ -197,7 +203,8 @@ function closePanel(): void {
  *  each with its game score editable and the placement points it earned. */
 function renderPanel(): void {
   const panel = $('correctPanel');
-  const entity = entitiesOf(night).find((e) => e.id === panelFor);
+  // Left entities stay correctable, so look among everyone.
+  const entity = allEntitiesOf(night).find((e) => e.id === panelFor);
   if (!entity || currentScreen() !== 'screen-home') {
     panelFor = null;
     panel.hidden = true;

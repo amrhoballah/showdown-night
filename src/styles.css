@@ -466,3 +466,25 @@ button:focus-visible, .pill:focus-visible, input:focus-visible{ outline:3px soli
 .continue-foot .btn{ font-size:1.2rem; }
 .result-scores.compact .result-row{ padding:10px 18px; font-size:1.3rem; }
 .result-scores.compact .result-row .val{ font-size:1.7rem; }
+
+/* ---------- mid-night setup: locks, Left, Back ---------- */
+.mode-card:disabled{ opacity:0.45; cursor:not-allowed; }
+.mode-card.active:disabled{ opacity:0.8; }
+.setup-note{ color:var(--ink-dim); font-size:0.95rem; margin:12px 0 0; }
+.team-row .left-btn, .ffa-chip .left-btn{
+  background:none; border:1px solid var(--line); color:var(--ink-dim); border-radius:999px;
+  padding:6px 12px; font-size:0.8rem; font-weight:600; flex:none;
+}
+.team-row .left-btn:hover, .ffa-chip .left-btn:hover{ color:var(--ink); border-color:var(--ink-faint); }
+.ffa-chip .left-btn{ padding:2px 10px; margin-inline-start:4px; }
+.add-team-btn{ margin-top:12px; }
+.left-area{ margin-top:18px; border-top:1px dashed var(--line); padding-top:14px; }
+.left-area h4{ margin:0 0 10px; font-size:0.85rem; font-family:'IBM Plex Mono',monospace; letter-spacing:0.12em;
+  text-transform:uppercase; color:var(--ink-faint); font-weight:600; }
+.left-list{ display:flex; flex-wrap:wrap; gap:8px; }
+.left-chip{ display:inline-flex; align-items:center; gap:8px; background:var(--bg-raised-2); border:1px dashed var(--line);
+  border-radius:999px; padding:6px 8px 6px 12px; color:var(--ink-dim); user-select:none; }
+.left-chip .swatch{ width:12px; height:12px; border-radius:50%; opacity:0.6; }
+.left-chip .back-btn{ background:var(--bg-raised); border:1px solid var(--line); color:var(--ink); border-radius:999px;
+  padding:3px 12px; font-size:0.8rem; font-weight:600; }
+.left-chip .back-btn:hover{ border-color:var(--accent); color:var(--accent); }
