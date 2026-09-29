@@ -8,10 +8,10 @@ Spec: [Even scoring across games](../../even-scoring/spec.md). Vocabulary: the d
 
 **Status:** ready-for-agent
 
-- [ ] Beat 1 is full-screen: the game and "final scores" as a heading, "<winner> wins" as the title ("<a> & <b> tie for the win" for a shared top score), and every entity ranked by game score with its place number; the winner's row has the accent glow. No placement points on beat 1.
-- [ ] Confetti fires once as beat 1 appears, for about two seconds, in the winner's entity colour (both colours for a shared win); none when every entity ties; none when the system asks for reduced motion. No external asset.
-- [ ] With more than 6 entities, beat 1 shows two columns that read down each column.
-- [ ] "Tonight's standings →" or Space moves to beat 2: "Night standings", rows in the old order with old totals, then after a short pause each row slides to its new position, its total updates, and its "+N" appears. Ranks show, with tied totals sharing a place. Reduced motion skips the slide.
-- [ ] "Back to Home" or Space returns to Home, where the row shows the ranked standings; nothing else carries over from the result.
-- [ ] Place points, pie share and weight are never shown on these screens.
+- [x] Beat 1 is full-screen: the game and "final scores" as a heading, "<winner> wins" as the title ("<a> & <b> tie for the win" for a shared top score), and every entity ranked by game score with its place number; the winner's row has the accent glow. No placement points on beat 1.
+- [x] Confetti fires once as beat 1 appears, for about two seconds, in the winner's entity colour (both colours for a shared win); none when every entity ties; none when the system asks for reduced motion. No external asset.
+- [x] With more than 6 entities, beat 1 shows two columns that read down each column.
+- [x] "Tonight's standings →" or Space moves to beat 2: "Night standings", rows in the old order with old totals, then after a short pause each row slides to its new position, its total updates, and its "+N" appears. Ranks show, with tied totals sharing a place. Reduced motion skips the slide.
+- [x] "Back to Home" or Space returns to Home, where the row shows the ranked standings; nothing else carries over from the result.
+- [x] Place points, pie share and weight are never shown on these screens.
 - [ ] By hand: 2 teams, 4 teams and a 12-player free-for-all all read from across a room.

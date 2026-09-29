@@ -11,14 +11,7 @@ import { initMafia, renderMafia, stopMafiaTimer } from './games/mafia';
 import { initAct, renderAct, stopActTimer } from './games/act';
 import { initEmoji, renderEmoji } from './games/emoji';
 import { initWave, renderWave } from './games/wavelength';
-
-const GAME_NAMES: Record<GameType, string> = {
-  jeopardy: 'Jeopardy',
-  outburst: 'Outburst',
-  act: 'Act It Out',
-  emoji: 'Emoji',
-  wavelength: 'Wavelength',
-};
+import { initResults, showResults, GAME_NAMES } from './results';
 
 function stopAllTimers(): void {
   stopOutburstTimer();
@@ -26,12 +19,12 @@ function stopAllTimers(): void {
   stopMafiaTimer();
 }
 
-/** End the game in progress and go Home. For now Home is where ending lands;
- *  the result screens come later. */
+/** End the game in progress and show its result screens, which hand back to
+ *  Home. */
 function finishGame(): void {
   stopAllTimers();
-  endGame(night);
-  show('screen-home');
+  const ended = endGame(night);
+  if (ended) showResults(ended);
 }
 
 /** Launch a game that awards points. It needs somebody to award them to, and
@@ -60,6 +53,7 @@ async function launchScoring(type: GameType, render: () => void, screen: ScreenI
 
 function main(): void {
   initScoreboard();
+  initResults();
   initSetup();
   initJeopardy();
   initOutburst();
