@@ -18,6 +18,8 @@ const ob = {
   timer: 0 as number,
   /** The team shouting this round, chosen before the clock starts. */
   teamIdx: 0,
+  /** Where the current round is: before the clock, running, or tallying. */
+  phase: 'ready' as 'ready' | 'running' | 'tally',
 };
 
 function teamName(): string {
@@ -29,6 +31,11 @@ export function stopOutburstTimer(): void {
 }
 
 export function renderOutburst(): void {
+  ob.phase = 'ready';
+  if (ob.index >= OUTBURST.length) {
+    renderComplete();
+    return;
+  }
   const round = OUTBURST[ob.index];
   $('obProgress').textContent = `Round ${ob.index + 1} of ${OUTBURST.length}`;
   const card = $('obCard');
@@ -63,6 +70,7 @@ export function renderOutburst(): void {
 function startRound(round: (typeof OUTBURST)[number]): void {
   const card = $('obCard');
   ob.secondsLeft = 60;
+  ob.phase = 'running';
 
   card.innerHTML =
     `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${OUTBURST.length}</p>` +
@@ -87,6 +95,7 @@ function startRound(round: (typeof OUTBURST)[number]): void {
 
 function finishTimer(): void {
   clearInterval(ob.timer);
+  ob.phase = 'tally';
   const round = OUTBURST[ob.index];
   const card = $('obCard');
 
@@ -130,16 +139,32 @@ function buildTally(): void {
     award(ob.teamIdx, count);
     recordTurn(ob.teamIdx);
     ob.index++;
-    if (ob.index >= OUTBURST.length) {
-      $('obCard').innerHTML =
-        '<p class="ob-round mono">ALL ROUNDS COMPLETE</p>' +
-        "<h2 class=\"ob-cat\">That's every category.</h2>" +
-        '<p class="sub">Check the scoreboard up top for the final tally.</p>';
-      $('obProgress').textContent = 'Finished';
-    } else {
-      renderOutburst();
-    }
+    renderOutburst();
   });
+}
+
+function renderComplete(): void {
+  $('obCard').innerHTML =
+    '<p class="ob-round mono">ALL ROUNDS COMPLETE</p>' +
+    "<h2 class=\"ob-cat\">That's every category.</h2>" +
+    '<p class="sub">Check the scoreboard up top for the final tally.</p>';
+  $('obProgress').textContent = 'Finished';
+}
+
+/** A new Outburst game, from round 1. */
+export function startOutburst(): void {
+  stopOutburstTimer();
+  ob.index = 0;
+  renderOutburst();
+}
+
+/** Back into the game in progress. A running round goes back to its ready
+ *  card, so the clock starts again from 60 rather than carrying on; a round
+ *  already being tallied stays on its tally. */
+export function resumeOutburst(): void {
+  stopOutburstTimer();
+  if (ob.phase === 'tally') finishTimer();
+  else renderOutburst();
 }
 
 export function initOutburst(): void {

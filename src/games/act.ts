@@ -132,6 +132,22 @@ function refreshWord(): void {
   if (scoreEl) scoreEl.textContent = String(act.got);
 }
 
+/** A new Act It Out game, from the first "Start". */
+export function startAct(): void {
+  stopActTimer();
+  act.phase = 'ready';
+  renderAct();
+}
+
+/** Back into the game in progress. A running clock goes back to "Start", so
+ *  a turn can't carry on from where it was left; a finished turn waiting for
+ *  its points stays. */
+export function resumeAct(): void {
+  stopActTimer();
+  if (act.phase === 'play') act.phase = 'ready';
+  renderAct();
+}
+
 export function initAct(): void {
   $('actHomeBtn').addEventListener('click', () => {
     stopActTimer();

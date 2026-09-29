@@ -90,6 +90,7 @@ export function renderPicker(): void {
     'the same scoreboard.</p>';
 
   onClickAll(card, '.lang-card', (btn) => {
+    boardChosen = true;
     jeop.lang = btn.getAttribute('data-lang') as Lang;
     if (!jeop.dd[jeop.lang]) pickDailyDouble(jeop.lang);
     show('screen-board');
@@ -274,6 +275,13 @@ function finishCell(): void {
 
 type FinalStep = 'wager' | 'question' | 'verdict' | 'standings';
 
+/** Final Jeopardy's 60-second clock. */
+let finalTimer = 0;
+
+export function stopJeopardyTimer(): void {
+  clearInterval(finalTimer);
+}
+
 export function renderFinal(step: FinalStep): void {
   const b = activeBoard();
   const ents = entities();
@@ -332,20 +340,21 @@ export function renderFinal(step: FinalStep): void {
       }</p>` +
       `<button class="btn ghost" id="fReveal">${b.rtl ? 'اكشف الإجابة' : 'Reveal the answer'}</button>`;
 
-    const t = window.setInterval(() => {
+    stopJeopardyTimer();
+    finalTimer = window.setInterval(() => {
       secs--;
       const el = document.getElementById('fTimer');
       if (!el) {
-        clearInterval(t);
+        stopJeopardyTimer();
         return;
       }
       el.textContent = String(secs);
       el.classList.toggle('low', secs <= 10);
-      if (secs <= 0) clearInterval(t);
+      if (secs <= 0) stopJeopardyTimer();
     }, 1000);
 
     $('fReveal').addEventListener('click', () => {
-      clearInterval(t);
+      stopJeopardyTimer();
       renderFinal('verdict');
     });
     return;
@@ -423,6 +432,35 @@ export function renderFinal(step: FinalStep): void {
   $('fHome2').addEventListener('click', () => show('screen-home'));
 }
 
+/* ---------------- game in progress ---------------- */
+
+/** Whether this Jeopardy game has chosen its board yet. */
+let boardChosen = false;
+
+/** A new Jeopardy game: pick a board. */
+export function startJeopardy(): void {
+  boardChosen = false;
+  jeop.wager = 0;
+  jeop.currentCell = null;
+  show('screen-jpicker');
+  renderPicker();
+}
+
+/** Back into the game in progress, at its board. An open clue, a placed
+ *  Daily Double wager or a Final Jeopardy under way is dropped, so nothing
+ *  secret is shown again and no wager stands half-played; the clue stays
+ *  unused and Final Jeopardy can be started again. */
+export function resumeJeopardy(): void {
+  if (!boardChosen) {
+    startJeopardy();
+    return;
+  }
+  jeop.wager = 0;
+  jeop.currentCell = null;
+  show('screen-board');
+  renderBoard();
+}
+
 /* ---------------- wiring ---------------- */
 
 export function initJeopardy(): void {
@@ -451,7 +489,10 @@ export function initJeopardy(): void {
     renderPicker();
   });
   $('finalBtn').addEventListener('click', () => renderFinal('wager'));
-  $('finalHomeBtn').addEventListener('click', () => show('screen-home'));
+  $('finalHomeBtn').addEventListener('click', () => {
+    stopJeopardyTimer();
+    show('screen-home');
+  });
   $('ddHomeBtn').addEventListener('click', () => {
     jeop.wager = 0;
     show('screen-board');

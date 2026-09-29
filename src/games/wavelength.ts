@@ -158,6 +158,22 @@ export function renderWave(): void {
   });
 }
 
+/** A new Wavelength game: a fresh deck from round 1. */
+export function startWave(): void {
+  wave.deck = shuffle(SPECTRA) as Spectrum[];
+  wave.idx = 0;
+  wave.phase = 'handoff';
+  renderWave();
+}
+
+/** Back into the game in progress. A revealed target or a guess in progress
+ *  goes back to the hand-off, so the number is never shown to the room; the
+ *  clue-giver gets a new one. A result waiting to be confirmed stays. */
+export function resumeWave(): void {
+  if (wave.phase === 'target' || wave.phase === 'guess') wave.phase = 'handoff';
+  renderWave();
+}
+
 export function initWave(): void {
   $('waveHomeBtn').addEventListener('click', () => show('screen-home'));
 }

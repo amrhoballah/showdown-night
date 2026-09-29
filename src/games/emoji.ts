@@ -78,6 +78,17 @@ export function renderEmoji(): void {
   }
 }
 
+/** A new Emoji game: a freshly shuffled deck. */
+export function startEmoji(): void {
+  reset();
+  renderEmoji();
+}
+
+/** Back into the game in progress, on the riddle it was on. */
+export function resumeEmoji(): void {
+  renderEmoji();
+}
+
 export function initEmoji(): void {
   $('emojiHomeBtn').addEventListener('click', () => show('screen-home'));
 }

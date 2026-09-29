@@ -48,10 +48,15 @@ function stopResultTimers(): void {
   document.getElementById('confetti')?.remove();
 }
 
-/** Show the result screens for a game that has just ended. */
-export function showResults(ended: EndedGame): void {
+/** Where beat 2 hands over to: Home, unless the game was ended to start another. */
+let afterResults: (() => void) | null = null;
+
+/** Show the result screens for a game that has just ended. They hand back to
+ *  Home, or run `then` instead (e.g. to start the game the host switched to). */
+export function showResults(ended: EndedGame, then?: () => void): void {
   result = ended;
   beat = 1;
+  afterResults = then ?? null;
   show('screen-result');
   renderResult();
 }
@@ -60,11 +65,14 @@ function next(): void {
   if (beat === 1) {
     beat = 2;
     renderResult();
-  } else {
-    stopResultTimers();
-    result = null;
-    show('screen-home');
+    return;
   }
+  stopResultTimers();
+  result = null;
+  const then = afterResults;
+  afterResults = null;
+  if (then) then();
+  else show('screen-home');
 }
 
 export function renderResult(): void {
@@ -140,8 +148,11 @@ function renderStandings(r: EndedGame): void {
     `<p class="eyebrow">Tonight &middot; after ${GAME_NAMES[r.type]}</p>` +
     '<h1 class="result-title">Night standings</h1></div>' +
     `<div class="race" style="height:${n * rowH}px">${rows}</div>` +
-    '<div class="result-foot"><span class="result-hint">Space for Home</span>' +
-    '<button class="btn" id="resultHome">Back to Home</button></div>';
+    (afterResults
+      ? '<div class="result-foot"><span class="result-hint">Space to carry on</span>' +
+        '<button class="btn" id="resultHome">On to the next game &rarr;</button></div>'
+      : '<div class="result-foot"><span class="result-hint">Space for Home</span>' +
+        '<button class="btn" id="resultHome">Back to Home</button></div>');
   $('resultHome').addEventListener('click', next);
 
   if (!slide) return;
