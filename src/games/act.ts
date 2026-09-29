@@ -6,7 +6,8 @@
  */
 
 import { ACT_WORDS } from '../data/act';
-import { entities, award, recordTurn, nextTurnIndex } from '../scoreboard';
+import { night, renderScoreboard } from '../scoreboard';
+import { entitiesOf, award, confirmTurn, nextTurn, type EntityId } from '../night';
 import { $, show, escapeHtml, shuffle } from '../ui';
 
 const act = {
@@ -16,7 +17,8 @@ const act = {
   got: 0,
   seconds: 60,
   timer: 0 as number,
-  teamIdx: 0,
+  /** Who this turn is for, chosen before the clock starts. */
+  teamId: 0 as EntityId,
 };
 
 export function stopActTimer(): void {
@@ -27,9 +29,9 @@ export function renderAct(): void {
   const card = $('actCard');
 
   if (act.phase === 'ready') {
-    const ents = entities();
+    const ents = entitiesOf(night);
     // Whoever has had the fewest turns plays next; the host can change it.
-    const next = nextTurnIndex();
+    const next = nextTurn(night);
     card.innerHTML =
       '<p class="kicker">Act It Out</p>' +
       '<h2>One guesser, back to the screen.</h2>' +
@@ -42,8 +44,8 @@ export function renderAct(): void {
           'font-family:inherit;font-size:0.95rem;">' +
           ents
             .map(
-              (e, i) =>
-                `<option value="${i}"${i === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
+              (e) =>
+                `<option value="${e.id}"${e.id === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
             )
             .join('') +
           '</select>'
@@ -52,7 +54,7 @@ export function renderAct(): void {
 
     $('actStart').addEventListener('click', () => {
       const sel = document.getElementById('actTeam') as HTMLSelectElement | null;
-      act.teamIdx = sel ? Number(sel.value) : 0;
+      act.teamId = sel ? Number(sel.value) : 0;
       act.deck = shuffle(ACT_WORDS);
       act.idx = 0;
       act.got = 0;
@@ -101,7 +103,7 @@ export function renderAct(): void {
 
   // done
   clearInterval(act.timer);
-  const name = entities()[act.teamIdx]?.name ?? 'the team';
+  const name = entitiesOf(night).find((e) => e.id === act.teamId)?.name ?? 'the team';
   card.innerHTML =
     '<p class="kicker">Time&rsquo;s up</p>' +
     `<p class="score-burst">${act.got}</p>` +
@@ -113,8 +115,9 @@ export function renderAct(): void {
   // Adding the points confirms the turn, even at 0. "Another turn" is a
   // do-over: the round is discarded and no turn is counted.
   $('actAward').addEventListener('click', () => {
-    award(act.teamIdx, act.got);
-    recordTurn(act.teamIdx);
+    award(night, act.teamId, act.got);
+    confirmTurn(night, act.teamId);
+    renderScoreboard();
     act.phase = 'ready';
     renderAct();
   });

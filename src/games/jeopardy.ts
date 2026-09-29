@@ -14,8 +14,12 @@
 
 import type { Board, Lang, Question, Category } from '../types';
 import { BOARDS } from '../data/boards';
-import { night, state, entities, award, saveNight } from '../scoreboard';
+import { night, renderScoreboard, saveNight } from '../scoreboard';
 import {
+  entitiesOf,
+  award,
+  gameScoreOf,
+  type EntityId,
   startGame,
   gameInProgress,
   boardStatus,
@@ -33,9 +37,11 @@ interface JeopardyState {
   lang: Lang;
   currentCell: string | null;
   wager: number;
-  wagerTeam: number;
-  finalWagers: number[];
-  finalVerdicts: (boolean | null)[];
+  /** The team playing the Daily Double. */
+  wagerTeam: EntityId;
+  /** Final Jeopardy wagers and verdicts, by entity id. */
+  finalWagers: Record<EntityId, number>;
+  finalVerdicts: Record<EntityId, boolean | null>;
 }
 
 const jeop: JeopardyState = {
@@ -43,11 +49,26 @@ const jeop: JeopardyState = {
   currentCell: null,
   wager: 0,
   wagerTeam: 0,
-  finalWagers: [],
-  finalVerdicts: [],
+  finalWagers: {},
+  finalVerdicts: {},
 };
 
 const LANGS: Lang[] = ['en', 'ar'];
+
+/** Add (or subtract) points to a team's game score, and redraw. */
+function give(id: EntityId, pts: number): void {
+  award(night, id, pts);
+  renderScoreboard();
+}
+
+/** A team's game score on this board so far. */
+function scoreOf(id: EntityId): number {
+  return gameScoreOf(night, id);
+}
+
+function nameOf(id: EntityId): string {
+  return entitiesOf(night).find((e) => e.id === id)?.name ?? '';
+}
 
 function activeBoard(): Board {
   return BOARDS[jeop.lang];
@@ -187,7 +208,7 @@ function showQuestion(d: { cat: Category; q: Question }, pts: number): void {
   const note = $('ddNote');
   note.hidden = !jeop.wager;
   if (jeop.wager) {
-    const who = entities()[jeop.wagerTeam]?.name ?? '';
+    const who = nameOf(jeop.wagerTeam); // set as textContent, so not escaped
     note.textContent = b.rtl
       ? `مراهنة مزدوجة: ${who} راهن بـ ${jeop.wager} نقطة.`
       : `Daily Double: ${who} wagered ${jeop.wager}.`;
@@ -200,7 +221,7 @@ function showQuestion(d: { cat: Category; q: Question }, pts: number): void {
 
 function renderDailyDouble(d: { cat: Category; q: Question }): void {
   const b = activeBoard();
-  const ents = entities();
+  const ents = entitiesOf(night);
   const card = $('ddCard');
   const arCls = b.rtl ? ' ar' : '';
 
@@ -218,26 +239,26 @@ function renderDailyDouble(d: { cat: Category; q: Question }): void {
     }</p>` +
     '<div class="wager-grid">' +
     ents
-      .map((e, i) => {
-        const cap = Math.max(d.q.v, state.scores[i] || 0);
+      .map((e) => {
+        const cap = Math.max(d.q.v, scoreOf(e.id));
         return (
           `<div class="wager-row"><span class="who"><span class="sw" style="background:${e.color}"></span>` +
           `${escapeHtml(e.name)}</span>` +
           `<span class="cap">${b.rtl ? 'الحد الأقصى' : 'max'} ${cap}</span>` +
-          `<input type="number" id="ddW${i}" min="${d.q.v}" max="${cap}" value="${d.q.v}" step="50">` +
-          `<button class="btn" data-i="${i}" style="padding:10px 14px;font-size:0.85rem;">` +
+          `<input type="number" id="ddW${e.id}" min="${d.q.v}" max="${cap}" value="${d.q.v}" step="50">` +
+          `<button class="btn" data-id="${e.id}" style="padding:10px 14px;font-size:0.85rem;">` +
           `${b.rtl ? 'هذا فريقنا' : 'This is our team'}</button></div>`
         );
       })
       .join('') +
     '</div>';
 
-  onClickAll(card, 'button[data-i]', (btn) => {
-    const i = dataNum(btn, 'i');
-    const inp = $(`ddW${i}`) as HTMLInputElement;
-    const cap = Math.max(d.q.v, state.scores[i] || 0);
+  onClickAll(card, 'button[data-id]', (btn) => {
+    const id = dataNum(btn, 'id');
+    const inp = $(`ddW${id}`) as HTMLInputElement;
+    const cap = Math.max(d.q.v, scoreOf(id));
     jeop.wager = Math.min(cap, Math.max(d.q.v, parseInt(inp.value, 10) || d.q.v));
-    jeop.wagerTeam = i;
+    jeop.wagerTeam = id;
     showQuestion(d, jeop.wager);
   });
 
@@ -253,28 +274,28 @@ function buildAwardRow(): void {
   const pts = jeop.wager || d.q.v;
 
   if (jeop.wager) {
-    const e = entities()[jeop.wagerTeam] ?? { name: '', color: 'var(--accent)' };
+    const e = entitiesOf(night).find((x) => x.id === jeop.wagerTeam) ?? { color: 'var(--accent)' };
     row.innerHTML =
       `<button class="award-btn" data-dd="right"><span class="sw" style="background:${e.color}"></span>` +
       `${b.rtl ? `صحيح +${pts}` : `Correct +${pts}`}</button>` +
       '<button class="award-btn" data-dd="wrong"><span class="sw" style="background:var(--alert)"></span>' +
       `${b.rtl ? `خطأ −${pts}` : `Wrong −${pts}`}</button>`;
     onClickAll(row, '.award-btn', (btn) => {
-      award(jeop.wagerTeam, btn.getAttribute('data-dd') === 'right' ? pts : -pts);
+      give(jeop.wagerTeam, btn.getAttribute('data-dd') === 'right' ? pts : -pts);
       finishCell();
     });
     return;
   }
 
-  row.innerHTML = entities()
+  row.innerHTML = entitiesOf(night)
     .map(
-      (e, i) =>
-        `<button class="award-btn" data-i="${i}"><span class="sw" style="background:${e.color}"></span>` +
+      (e) =>
+        `<button class="award-btn" data-id="${e.id}"><span class="sw" style="background:${e.color}"></span>` +
         `+${pts} ${escapeHtml(e.name)}</button>`,
     )
     .join('');
   onClickAll(row, '.award-btn', (btn) => {
-    award(dataNum(btn, 'i'), pts);
+    give(dataNum(btn, 'id'), pts);
     finishCell();
   });
 }
@@ -300,12 +321,14 @@ export function stopJeopardyTimer(): void {
 
 export function renderFinal(step: FinalStep): void {
   const b = activeBoard();
-  const ents = entities();
+  const ents = entitiesOf(night);
   const card = $('finalCard');
   const arCls = b.rtl ? ' ar' : '';
 
   if (step === 'wager') {
-    jeop.finalWagers = ents.map((_, i) => Math.max(0, Math.floor((state.scores[i] || 0) / 2)));
+    jeop.finalWagers = Object.fromEntries(
+      ents.map((e) => [e.id, Math.max(0, Math.floor(scoreOf(e.id) / 2))]),
+    );
     card.innerHTML =
       `<p class="kicker">${b.rtl ? 'السؤال الأخير' : 'Final Jeopardy'}</p>` +
       `<h2 class="${b.rtl ? 'ar' : ''}">${escapeHtml(b.finalCat)}</h2>` +
@@ -316,13 +339,13 @@ export function renderFinal(step: FinalStep): void {
       }</div>` +
       '<div class="wager-grid">' +
       ents
-        .map((e, i) => {
-          const cap = Math.max(0, state.scores[i] || 0);
+        .map((e) => {
+          const cap = Math.max(0, scoreOf(e.id));
           return (
             `<div class="wager-row"><span class="who"><span class="sw" style="background:${e.color}"></span>` +
             `${escapeHtml(e.name)}</span>` +
             `<span class="cap">${b.rtl ? 'الرصيد' : 'score'} ${cap}</span>` +
-            `<input type="number" id="fW${i}" min="0" max="${cap}" value="${jeop.finalWagers[i]}" step="50"></div>`
+            `<input type="number" id="fW${e.id}" min="0" max="${cap}" value="${jeop.finalWagers[e.id]}" step="50"></div>`
           );
         })
         .join('') +
@@ -332,10 +355,10 @@ export function renderFinal(step: FinalStep): void {
       }</button>`;
 
     $('fLock').addEventListener('click', () => {
-      ents.forEach((_, i) => {
-        const cap = Math.max(0, state.scores[i] || 0);
-        const v = parseInt(($(`fW${i}`) as HTMLInputElement).value, 10) || 0;
-        jeop.finalWagers[i] = Math.min(cap, Math.max(0, v));
+      ents.forEach((e) => {
+        const cap = Math.max(0, scoreOf(e.id));
+        const v = parseInt(($(`fW${e.id}`) as HTMLInputElement).value, 10) || 0;
+        jeop.finalWagers[e.id] = Math.min(cap, Math.max(0, v));
       });
       renderFinal('question');
     });
@@ -377,7 +400,7 @@ export function renderFinal(step: FinalStep): void {
   }
 
   if (step === 'verdict') {
-    jeop.finalVerdicts = ents.map(() => null);
+    jeop.finalVerdicts = Object.fromEntries(ents.map((e) => [e.id, null]));
     card.innerHTML =
       `<p class="kicker">${b.rtl ? 'الإجابة' : 'The answer'}</p>` +
       `<p class="huge${arCls}" style="color:var(--good);font-size:clamp(1.2rem,2.8vw,1.7rem);max-width:40ch;">` +
@@ -385,30 +408,30 @@ export function renderFinal(step: FinalStep): void {
       '<div class="wager-grid">' +
       ents
         .map(
-          (e, i) =>
+          (e) =>
             `<div class="wager-row"><span class="who"><span class="sw" style="background:${e.color}"></span>` +
             `${escapeHtml(e.name)}</span>` +
-            `<span class="cap">${b.rtl ? 'راهن بـ' : 'wagered'} ${jeop.finalWagers[i]}</span>` +
-            `<div class="verdict-row"><button class="yes" data-i="${i}" data-v="1">${
+            `<span class="cap">${b.rtl ? 'راهن بـ' : 'wagered'} ${jeop.finalWagers[e.id]}</span>` +
+            `<div class="verdict-row"><button class="yes" data-id="${e.id}" data-v="1">${
               b.rtl ? 'صحيح' : 'Right'
             }</button>` +
-            `<button class="no" data-i="${i}" data-v="0">${b.rtl ? 'خطأ' : 'Wrong'}</button></div></div>`,
+            `<button class="no" data-id="${e.id}" data-v="0">${b.rtl ? 'خطأ' : 'Wrong'}</button></div></div>`,
         )
         .join('') +
       '</div>' +
       `<button class="btn" id="fApply">${b.rtl ? 'احسب النتيجة النهائية' : 'Settle the scores'}</button>`;
 
     onClickAll(card, '.verdict-row button', (btn) => {
-      jeop.finalVerdicts[dataNum(btn, 'i')] = btn.getAttribute('data-v') === '1';
+      jeop.finalVerdicts[dataNum(btn, 'id')] = btn.getAttribute('data-v') === '1';
       const row = btn.parentElement!;
       row.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
       btn.classList.add('on');
     });
 
     $('fApply').addEventListener('click', () => {
-      ents.forEach((_, i) => {
-        if (jeop.finalVerdicts[i] === true) award(i, jeop.finalWagers[i]);
-        else if (jeop.finalVerdicts[i] === false) award(i, -jeop.finalWagers[i]);
+      ents.forEach((e) => {
+        if (jeop.finalVerdicts[e.id] === true) give(e.id, jeop.finalWagers[e.id]);
+        else if (jeop.finalVerdicts[e.id] === false) give(e.id, -jeop.finalWagers[e.id]);
       });
       settleFinal(night, jeop.lang);
       saveNight();
@@ -478,7 +501,7 @@ export function initJeopardy(): void {
   });
 
   $('skipAwardBtn').addEventListener('click', () => {
-    if (jeop.wager) award(jeop.wagerTeam, -jeop.wager);
+    if (jeop.wager) give(jeop.wagerTeam, -jeop.wager);
     finishCell();
   });
 

@@ -5,7 +5,8 @@
  */
 
 import { EMOJI } from '../data/emoji';
-import { entities, award } from '../scoreboard';
+import { night, renderScoreboard } from '../scoreboard';
+import { entitiesOf, award } from '../night';
 import { endGameNow } from '../results';
 import { $, show, escapeHtml, shuffle, onClickAll, dataNum } from '../ui';
 
@@ -37,7 +38,7 @@ export function renderEmoji(): void {
 
   const item = em.deck[em.idx];
   $('emojiProgress').textContent = `Riddle ${em.idx + 1} of ${em.deck.length}`;
-  const ents = entities();
+  const ents = entitiesOf(night);
 
   card.innerHTML =
     `<p class="kicker">${item.h}</p>` +
@@ -48,8 +49,8 @@ export function renderEmoji(): void {
         '<div class="btn-row">' +
         ents
           .map(
-            (e, i) =>
-              `<button class="award-btn" data-i="${i}"><span class="sw" style="background:${e.color}"></span>` +
+            (e) =>
+              `<button class="award-btn" data-id="${e.id}"><span class="sw" style="background:${e.color}"></span>` +
               `+1 ${escapeHtml(e.name)}</button>`,
           )
           .join('') +
@@ -59,7 +60,8 @@ export function renderEmoji(): void {
 
   if (em.revealed) {
     onClickAll(card, '.award-btn', (btn) => {
-      award(dataNum(btn, 'i'), 1);
+      award(night, dataNum(btn, 'id'), 1);
+      renderScoreboard();
       em.idx++;
       em.revealed = false;
       renderEmoji();

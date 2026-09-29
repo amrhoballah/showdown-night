@@ -9,8 +9,16 @@
  */
 
 import { OUTBURST } from '../data/outburst';
-import { entities, award, recordTurn, nextTurnIndex, turnsTaken } from '../scoreboard';
-import { fullLaps } from '../night';
+import { night, renderScoreboard } from '../scoreboard';
+import {
+  entitiesOf,
+  award,
+  confirmTurn,
+  nextTurn,
+  turnsTaken,
+  fullLaps,
+  type EntityId,
+} from '../night';
 import { endGameNow } from '../results';
 import { $, show, escapeHtml } from '../ui';
 
@@ -19,13 +27,13 @@ const ob = {
   secondsLeft: 60,
   timer: 0 as number,
   /** The team shouting this round, chosen before the clock starts. */
-  teamIdx: 0,
+  teamId: 0 as EntityId,
   /** Where the current round is: before the clock, running, or tallying. */
   phase: 'ready' as 'ready' | 'running' | 'tally',
 };
 
 function teamName(): string {
-  return escapeHtml(entities()[ob.teamIdx]?.name ?? 'your team');
+  return escapeHtml(entitiesOf(night).find((e) => e.id === ob.teamId)?.name ?? 'your team');
 }
 
 export function stopOutburstTimer(): void {
@@ -41,9 +49,9 @@ export function renderOutburst(): void {
   const round = OUTBURST[ob.index];
   $('obProgress').textContent = `Round ${ob.index + 1} of ${roundCount()}`;
   const card = $('obCard');
-  const ents = entities();
+  const ents = entitiesOf(night);
   // Whoever has had the fewest turns shouts next; the host can change it.
-  const next = nextTurnIndex();
+  const next = nextTurn(night);
 
   card.innerHTML =
     `<p class="ob-round mono">ROUND ${ob.index + 1} OF ${roundCount()}</p>` +
@@ -56,15 +64,15 @@ export function renderOutburst(): void {
     'border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:inherit;font-size:0.95rem;">' +
     ents
       .map(
-        (e, i) =>
-          `<option value="${i}"${i === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
+        (e) =>
+          `<option value="${e.id}"${e.id === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
       )
       .join('') +
     '</select>' +
     '<button class="btn" id="obStartBtn">Reveal category &amp; start 60s</button>';
 
   $('obStartBtn').addEventListener('click', () => {
-    ob.teamIdx = Number(($('obTeamSelect') as HTMLSelectElement).value);
+    ob.teamId = Number(($('obTeamSelect') as HTMLSelectElement).value);
     startRound(round);
   });
 }
@@ -138,8 +146,9 @@ function buildTally(): void {
   });
   // Adding the points confirms the team's turn, even at 0.
   $('obAwardBtn').addEventListener('click', () => {
-    award(ob.teamIdx, count);
-    recordTurn(ob.teamIdx);
+    award(night, ob.teamId, count);
+    confirmTurn(night, ob.teamId);
+    renderScoreboard();
     ob.index++;
     renderOutburst();
   });
@@ -148,7 +157,7 @@ function buildTally(): void {
 /** Rounds in this game: the last full lap, so every team has had the same
  *  number of turns. */
 function roundCount(): number {
-  return fullLaps(OUTBURST.length, entities().length);
+  return fullLaps(OUTBURST.length, entitiesOf(night).length);
 }
 
 /** Natural finish, after the last full lap. */
@@ -176,7 +185,7 @@ export function resumeOutburst(): void {
   // Each round is one confirmed turn, so the round comes from the night's
   // turn count; that also carries it over a reload, when this screen's own
   // state starts afresh.
-  ob.index = turnsTaken();
+  ob.index = turnsTaken(night);
   if (ob.phase === 'tally') finishTimer();
   else renderOutburst();
 }

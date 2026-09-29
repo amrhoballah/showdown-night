@@ -1,11 +1,12 @@
-/** The sticky scoreboard, and the positional adapters over the night.
+/** Tonight's night and the sticky scoreboard row.
  *
- *  The night itself (entities with stable ids, games, standings) lives in
- *  `night.ts`. The functions here keep the old index-based interface the game
- *  modules call - `entities()`, `award(i, pts)`, `state.scores[i]` - until
- *  they move onto the night directly. Awards go into the game in progress.
- *  Mafia is the deliberate exception: it tracks its own players and win
- *  condition and never touches these scores.
+ *  The night itself - entities, the game in progress, finished games,
+ *  standings - is the pure Night module (`night.ts`). This module holds the
+ *  one instance of it, saves it to localStorage after every change, and draws
+ *  the row. Game modules change the night through its operations, then call
+ *  `renderScoreboard()`, which redraws and saves. Mafia is the deliberate
+ *  exception: it tracks its own players and win condition and never touches
+ *  the night's scores.
  *
  *  The row shows the game in progress's game scores under "This game" while
  *  its screens are up. Holding that label shows the night standings under
@@ -13,7 +14,6 @@
  *  standings.
  */
 
-import type { Entity } from './types';
 import {
   newNight,
   entitiesOf,
@@ -24,13 +24,8 @@ import {
   finishedGames,
   setGameScore,
   earnedIn,
-  confirmTurn,
-  nextTurn,
-  turnsOf,
   serialize,
   deserialize,
-  award as awardInNight,
-  type Mode,
   type EntityId,
   type GameRef,
   type GameType,
@@ -39,7 +34,6 @@ import {
 import { GAME_NAMES } from './results';
 import { $, escapeHtml, currentScreen, onScreenChange, dataNum, toast } from './ui';
 
-export { TEAM_COLORS, TEAM_NAME_DEFAULTS } from './night';
 
 /** Tonight's night. The only instance; the setup screen changes it through
  *  the night's operations. Loading or starting a new night refills this same
@@ -77,35 +71,6 @@ export function loadNight(): void {
 export function startNewNight(): void {
   Object.assign(night, newNight());
   saveNight();
-}
-
-/** How many turns have been confirmed in the game in progress, in total. */
-export function turnsTaken(): number {
-  return entitiesOf(night).reduce((sum, e) => sum + turnsOf(night, e.id), 0);
-}
-
-/** Read-only view of the night in the old shape. Positional: `scores[i]` is
- *  the game score of `entities()[i]` in the game in progress. Write through
- *  the night, never through this. */
-export const state = {
-  get mode(): Mode {
-    return night.mode;
-  },
-  get teamCount(): number {
-    return night.teams.length;
-  },
-  /** Names only, for Mafia's pre-filled player list. */
-  get ffaPlayers(): { name: string }[] {
-    return night.players.filter((p) => !p.left).map((p) => ({ name: p.name }));
-  },
-  get scores(): number[] {
-    return entitiesOf(night).map((e) => gameScoreOf(night, e.id));
-  },
-};
-
-/** The current scoring units: teams, or individual players in free-for-all. */
-export function entities(): Entity[] {
-  return entitiesOf(night).map((e) => ({ name: e.name, color: e.color }));
 }
 
 /** True while the host is holding "This game" to see the standings. */
@@ -312,26 +277,4 @@ export function initScoreboard(): void {
     renderScoreboard();
     renderPanel();
   });
-}
-
-/** Record a confirmed turn for the entity at index `i` (even a 0-point one). */
-export function recordTurn(i: number): void {
-  const e = entitiesOf(night)[i];
-  if (e) confirmTurn(night, e.id);
-  saveNight();
-}
-
-/** Index of the entity whose turn is next (fewest turns), 0 if none. */
-export function nextTurnIndex(): number {
-  const id = nextTurn(night);
-  return Math.max(0, entitiesOf(night).findIndex((e) => e.id === id));
-}
-
-/** Add (or, with a negative value, subtract) points for the entity at index
- *  `i`, in the game in progress. */
-export function award(i: number, pts: number): void {
-  const e = entitiesOf(night)[i];
-  if (!e) return;
-  awardInNight(night, e.id, pts);
-  renderScoreboard();
 }

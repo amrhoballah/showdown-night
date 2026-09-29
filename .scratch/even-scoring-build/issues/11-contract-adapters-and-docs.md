@@ -8,7 +8,7 @@ Spec: [Even scoring across games](../../even-scoring/spec.md). Vocabulary: the d
 
 **Status:** ready-for-agent
 
-- [ ] No caller of the positional adapters remains; they are removed, and `npm run build` and `npm test` pass.
-- [ ] CLAUDE.md's architecture and conventions describe the Night module as the owner of shared state (entities, games, standings, the saved night), replacing the notes on the scoreboard as shared state and `award()` as the running total.
-- [ ] CLAUDE.md's "Testing" section mentions `npm test` alongside the by-hand checks.
-- [ ] CLAUDE.md keeps its existing decisions (Mafia outside the standings, Jeopardy's wager rules, the Arabic board's rules) and adds the new ones worth protecting: weights by expected length, placement over raw points, one game in progress, Jeopardy boards played once a night.
+- [x] No caller of the positional adapters remains; they are removed, and `npm run build` and `npm test` pass.
+- [x] CLAUDE.md's architecture and conventions describe the Night module as the owner of shared state (entities, games, standings, the saved night), replacing the notes on the scoreboard as shared state and `award()` as the running total.
+- [x] CLAUDE.md's "Testing" section mentions `npm test` alongside the by-hand checks.
+- [x] CLAUDE.md keeps its existing decisions (Mafia outside the standings, Jeopardy's wager rules, the Arabic board's rules) and adds the new ones worth protecting: weights by expected length, placement over raw points, one game in progress, Jeopardy boards played once a night.

@@ -10,7 +10,8 @@
 
 import type { MafiaPlayer, MafiaRoleName } from '../types';
 import { ROLE_INFO } from '../data/mafia';
-import { state } from '../scoreboard';
+import { night } from '../scoreboard';
+import { entitiesOf } from '../night';
 import { $, show, escapeHtml, shuffle, onClickAll, dataNum } from '../ui';
 
 type Phase = 'setup' | 'reveal' | 'roleShown' | 'night' | 'day' | 'vote' | 'over';
@@ -55,9 +56,9 @@ export function stopMafiaTimer(): void {
 
 /** Reuse free-for-all names when the user already typed them on the home screen. */
 function presetNames(): string[] | null {
-  if (state.mode === 'ffa' && state.ffaPlayers.length >= 4) {
-    return state.ffaPlayers.map((p) => p.name);
-  }
+  // Names only: Mafia never reads or writes the night's scores.
+  const players = night.mode === 'ffa' ? entitiesOf(night) : [];
+  if (players.length >= 4) return players.map((p) => p.name);
   return null;
 }
 

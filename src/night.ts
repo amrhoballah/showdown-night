@@ -364,6 +364,11 @@ export function turnsOf(night: Night, id: EntityId): number {
   return night.current?.turns[id] ?? 0;
 }
 
+/** How many turns have been confirmed in the game in progress, in total. */
+export function turnsTaken(night: Night): number {
+  return Object.values(night.current?.turns ?? {}).reduce((sum, n) => sum + n, 0);
+}
+
 /** Who should take the next turn: the entity with the fewest turns. Ties go
  *  to the first of them after whoever took the last turn, in entity order, so
  *  an even game rotates. Null when no game with turns is in progress. */
