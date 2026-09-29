@@ -64,6 +64,29 @@ button:focus-visible, .pill:focus-visible, input:focus-visible{ outline:3px soli
   border-radius:999px; padding:8px 14px; font-size:0.85rem; font-weight:600;
 }
 .home-btn:hover{ color:var(--ink); border-color:var(--ink-faint); }
+.end-game-btn{ color:var(--accent); border-color:var(--accent); }
+.end-game-btn:hover{ color:var(--accent-ink); background:var(--accent); border-color:var(--accent); }
+.score-row{ align-items:center; }
+.score-label{
+  font-family:'IBM Plex Mono', monospace; font-size:0.72rem; letter-spacing:0.14em;
+  text-transform:uppercase; color:var(--ink-faint); font-weight:600;
+}
+.score-label.hold{
+  background:none; border:1px dashed var(--line); border-radius:999px; padding:8px 12px;
+  color:var(--ink-dim); user-select:none; touch-action:none;
+}
+.score-label.hold:hover{ border-color:var(--ink-faint); }
+.score-label.hold.peeking{ color:var(--accent); border-color:var(--accent); border-style:solid; }
+.score-chip .place{ font-size:0.8rem; color:var(--ink-faint); font-weight:700; min-width:1ch; }
+
+/* ---------- confirm ---------- */
+.confirm-backdrop{
+  position:fixed; inset:0; z-index:100; background:rgba(10,8,18,0.82); backdrop-filter:blur(6px);
+  display:flex; align-items:center; justify-content:center; padding:16px;
+}
+.confirm-backdrop[hidden]{ display:none; }
+.confirm-card{ max-width:640px; width:100%; padding:40px 32px; text-align:center; }
+.confirm-card h2{ font-size:clamp(1.5rem, 3.4vw, 2.2rem); line-height:1.2; margin-bottom:28px; }
 
 /* ---------- generic screen chrome ---------- */
 .eyebrow{

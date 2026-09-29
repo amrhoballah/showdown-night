@@ -25,12 +25,61 @@ export function $(id: string): HTMLElement {
   return el;
 }
 
+let current: ScreenId = 'screen-home';
+const screenListeners: ((id: ScreenId) => void)[] = [];
+
 /** Show one screen and hide the rest. */
 export function show(id: ScreenId): void {
   SCREENS.forEach((s) => {
     $(s).hidden = s !== id;
   });
+  current = id;
   window.scrollTo(0, 0);
+  screenListeners.forEach((fn) => fn(id));
+}
+
+export function currentScreen(): ScreenId {
+  return current;
+}
+
+/** Run `fn` after every screen change. */
+export function onScreenChange(fn: (id: ScreenId) => void): void {
+  screenListeners.push(fn);
+}
+
+/** Ask the host a yes/no question in a full-screen card, instead of a browser
+ *  dialog that would be unreadable from across the room. Resolves true for
+ *  yes; Esc, the cancel button or clicking outside the card resolve false. */
+export function confirmBox(message: string, yesLabel: string, noLabel = 'Cancel'): Promise<boolean> {
+  const box = $('confirmBox');
+  box.innerHTML =
+    '<div class="confirm-card card" role="dialog" aria-modal="true" aria-labelledby="confirmMsg">' +
+    `<h2 id="confirmMsg">${message}</h2>` +
+    '<div class="btn-row">' +
+    `<button class="btn ghost" id="confirmNo">${noLabel}</button>` +
+    `<button class="btn" id="confirmYes">${yesLabel}</button>` +
+    '</div></div>';
+  box.hidden = false;
+  $('confirmYes').focus();
+
+  return new Promise((resolve) => {
+    const done = (answer: boolean) => {
+      box.hidden = true;
+      box.innerHTML = '';
+      document.removeEventListener('keydown', onKey);
+      resolve(answer);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') done(false);
+    };
+    document.addEventListener('keydown', onKey);
+    $('confirmYes').addEventListener('click', () => done(true));
+    $('confirmNo').addEventListener('click', () => done(false));
+    // Assigned, not added: the backdrop outlives each confirm.
+    box.onclick = (e) => {
+      if (e.target === box) done(false);
+    };
+  });
 }
 
 /** Escape text before it goes into innerHTML. Question data is ours, but team
