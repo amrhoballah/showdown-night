@@ -32,7 +32,10 @@
     </div>
 
     <div class="card" style="padding:24px; margin-top:10px;">
-      <h3 style="font-size:1.1rem;">How are you splitting up?</h3>
+      <div class="setup-head">
+        <h3 style="font-size:1.1rem;">How are you splitting up?</h3>
+        <button class="btn ghost new-night-btn" id="newNightBtn">New night</button>
+      </div>
       <div class="mode-grid" id="modeGrid"></div>
 
       <div id="teamSetupArea" class="team-setup"></div>
@@ -186,6 +189,11 @@
       <button class="btn ghost" id="waveHomeBtn">&larr; Back to home</button>
       <span class="sub" id="waveProgress" style="margin:0;"></span>
     </div>
+  </section>
+
+  <!-- ===================== CONTINUE TONIGHT (on load) ===================== -->
+  <section id="screen-continue" class="result-screen" hidden>
+    <div class="result-card" id="continueCard"></div>
   </section>
 
   <!-- ===================== END OF GAME RESULTS ===================== -->

@@ -23,6 +23,12 @@ import {
   unevenTurns,
   fullLaps,
   boardStatus,
+  boardProgress,
+  hideDailyDouble,
+  useClue,
+  settleFinal,
+  serialize,
+  deserialize,
   TEAM_COLORS,
   TEAM_NAME_DEFAULTS,
   type Night,
@@ -228,6 +234,97 @@ describe('Jeopardy boards', () => {
     play(n, 'jeopardy', [1, 0], 'en');
     setTeams(n, 3);
     expect(boardStatus(n, 'en')).toBe('fresh');
+  });
+});
+
+describe('Jeopardy board progress', () => {
+  it('records used clues, the Daily Double and a settled Final per board', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'ar');
+    hideDailyDouble(n, 'ar', '3-2');
+    useClue(n, 'ar', '0-0');
+    useClue(n, 'ar', '0-0');
+    useClue(n, 'ar', '1-4');
+    settleFinal(n, 'ar');
+    expect(boardProgress(n, 'ar')).toEqual({ used: ['0-0', '1-4'], dailyDouble: '3-2', finalDone: true });
+    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false });
+  });
+
+  it('starts fresh whenever a board starts a game', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'en');
+    useClue(n, 'en', '0-0');
+    setTeams(n, 3); // clears the night, so the board is fresh again
+    startGame(n, 'jeopardy', 'en');
+    expect(boardProgress(n, 'en').used).toEqual([]);
+  });
+});
+
+describe('the saved night', () => {
+  /** A night with every shape in it: mode, renamed entities, finished games
+   *  (a Jeopardy board among them), a game in progress with turns, and
+   *  Jeopardy progress. */
+  function busyNight(): Night {
+    const n = newNight();
+    setFreeForAll(n);
+    ['Karim', 'Hana', 'Salma'].forEach((p) => addPlayer(n, p));
+    rename(n, entitiesOf(n)[1].id, 'Hana M.');
+    play(n, 'emoji', [3, 1, 0]);
+    play(n, 'jeopardy', [800, -200, 0], 'en');
+    startGame(n, 'wavelength');
+    award(n, entitiesOf(n)[2].id, 4);
+    confirmTurn(n, entitiesOf(n)[2].id);
+    boardProgress(n, 'en').used.push('0-0');
+    hideDailyDouble(n, 'en', '2-3');
+    settleFinal(n, 'en');
+    return n;
+  }
+
+  it('round-trips every part of the night exactly', () => {
+    const n = busyNight();
+    const back = deserialize(serialize(n));
+    expect(back).toEqual(n);
+    expect(standings(back)).toEqual(standings(n));
+    expect(nextTurn(back)).toBe(nextTurn(n));
+    expect(boardStatus(back, 'en')).toBe('played');
+  });
+
+  it('round-trips a Jeopardy board in progress', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'ar');
+    award(n, entitiesOf(n)[0].id, -400);
+    hideDailyDouble(n, 'ar', '1-1');
+    useClue(n, 'ar', '1-1');
+    const back = deserialize(serialize(n));
+    expect(back).toEqual(n);
+    expect(boardStatus(back, 'ar')).toBe('in-progress');
+  });
+
+  it('round-trips a fresh night', () => {
+    expect(deserialize(serialize(newNight()))).toEqual(newNight());
+  });
+
+  it('keeps working after it is read back', () => {
+    const back = deserialize(serialize(busyNight()));
+    endGame(back);
+    expect(finishedGames(back)).toHaveLength(3);
+    expect(addPlayer(back, 'Omar').id).toBeGreaterThan(Math.max(...back.players.slice(0, 3).map((p) => p.id)));
+  });
+
+  it.each([
+    ['nothing saved', null],
+    ['empty text', ''],
+    ['not JSON', '{oops'],
+    ['an unknown version', JSON.stringify({ version: 99, night: newNight() })],
+    ['no version', JSON.stringify(newNight())],
+    ['the wrong shape', JSON.stringify({ version: 1, night: { mode: 'teams' } })],
+    ['a bad game type', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'mafia', entityIds: [], scores: {} }] } })],
+    ['a non-whole score', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'emoji', entityIds: [1], scores: { 1: 1.5 } }] } })],
+  ])('falls back to a fresh night for %s', (_, data) => {
+    expect(deserialize(data)).toEqual(newNight());
   });
 });
 

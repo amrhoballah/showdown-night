@@ -9,7 +9,7 @@
  */
 
 import { OUTBURST } from '../data/outburst';
-import { entities, award, recordTurn, nextTurnIndex } from '../scoreboard';
+import { entities, award, recordTurn, nextTurnIndex, turnsTaken } from '../scoreboard';
 import { fullLaps } from '../night';
 import { endGameNow } from '../results';
 import { $, show, escapeHtml } from '../ui';
@@ -173,6 +173,10 @@ export function startOutburst(): void {
  *  already being tallied stays on its tally. */
 export function resumeOutburst(): void {
   stopOutburstTimer();
+  // Each round is one confirmed turn, so the round comes from the night's
+  // turn count; that also carries it over a reload, when this screen's own
+  // state starts afresh.
+  ob.index = turnsTaken();
   if (ob.phase === 'tally') finishTimer();
   else renderOutburst();
 }

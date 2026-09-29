@@ -14,6 +14,7 @@ export const SCREENS = [
   'screen-emoji',
   'screen-wave',
   'screen-result',
+  'screen-continue',
 ] as const;
 
 export type ScreenId = (typeof SCREENS)[number];

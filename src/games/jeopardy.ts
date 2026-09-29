@@ -14,16 +14,23 @@
 
 import type { Board, Lang, Question, Category } from '../types';
 import { BOARDS } from '../data/boards';
-import { night, state, entities, award } from '../scoreboard';
-import { startGame, gameInProgress, boardStatus } from '../night';
+import { night, state, entities, award, saveNight } from '../scoreboard';
+import {
+  startGame,
+  gameInProgress,
+  boardStatus,
+  boardProgress,
+  hideDailyDouble,
+  useClue,
+  settleFinal,
+} from '../night';
 import { endGameNow } from '../results';
 import { $, show, escapeHtml, onClickAll, dataNum } from '../ui';
 
+/** This screen's own state. Board progress (used clues, the Daily Double,
+ *  Final done) lives in the night, so it is saved with it. */
 interface JeopardyState {
   lang: Lang;
-  used: Record<Lang, Record<string, boolean>>;
-  dd: Record<Lang, string | null>;
-  finalDone: Record<Lang, boolean>;
   currentCell: string | null;
   wager: number;
   wagerTeam: number;
@@ -33,9 +40,6 @@ interface JeopardyState {
 
 const jeop: JeopardyState = {
   lang: 'en',
-  used: { en: {}, ar: {} },
-  dd: { en: null, ar: null },
-  finalDone: { en: false, ar: false },
   currentCell: null,
   wager: 0,
   wagerTeam: 0,
@@ -54,12 +58,17 @@ function pickDailyDouble(lang: Lang): void {
   const cats = BOARDS[lang].cats;
   const ci = Math.floor(Math.random() * cats.length);
   const qi = 1 + Math.floor(Math.random() * (cats[ci].qs.length - 1));
-  jeop.dd[lang] = `${ci}-${qi}`;
+  hideDailyDouble(night, lang, `${ci}-${qi}`);
 }
 
-function boardProgress(lang: Lang): string {
+/** The active board's progress tonight. */
+function progress() {
+  return boardProgress(night, jeop.lang);
+}
+
+function progressText(lang: Lang): string {
   const total = BOARDS[lang].cats.reduce((n, c) => n + c.qs.length, 0);
-  return `${Object.keys(jeop.used[lang]).length}/${total}`;
+  return `${boardProgress(night, lang).used.length}/${total}`;
 }
 
 function cellData(key: string): { cat: Category; q: Question } {
@@ -94,12 +103,11 @@ export function renderPicker(): void {
 
   onClickAll(card, '.lang-card:not(:disabled)', (btn) => {
     const lang = btn.getAttribute('data-lang') as Lang;
+    // Starting the board's game gives it fresh progress.
     if (!startGame(night, 'jeopardy', lang)) return;
-    // A board's game always starts fresh: a played board can't be restarted.
     jeop.lang = lang;
-    jeop.used[lang] = {};
-    jeop.finalDone[lang] = false;
     pickDailyDouble(lang);
+    saveNight();
     show('screen-board');
     renderBoard();
   });
@@ -118,7 +126,7 @@ export function renderBoard(): void {
   title.className = b.rtl ? 'ar' : '';
   title.style.fontSize = '1.8rem';
   $('boardEyebrow').textContent = b.rtl ? 'جيوباردي · اللوحة العربية' : 'Jeopardy · English board';
-  $('boardProgress').textContent = `${boardProgress(jeop.lang)} used`;
+  $('boardProgress').textContent = `${progressText(jeop.lang)} used`;
 
   let html = cats
     .map((cat) => `<div class="cat-head${b.rtl ? ' ar' : ''}">${escapeHtml(cat.name)}</div>`)
@@ -129,7 +137,7 @@ export function renderBoard(): void {
     cats.forEach((cat, ci) => {
       const q = cat.qs[r];
       const key = `${ci}-${r}`;
-      const used = jeop.used[jeop.lang][key];
+      const used = progress().used.includes(key);
       html +=
         `<button class="cell" data-key="${key}" data-hard="${q.v >= 400 ? 1 : 0}" ` +
         `${used ? 'disabled' : ''}>${used ? '&mdash;' : q.v}</button>`;
@@ -138,9 +146,9 @@ export function renderBoard(): void {
   board.innerHTML = html;
   onClickAll(board, '.cell:not(:disabled)', (btn) => openQuestion(btn.getAttribute('data-key')!));
 
-  const allUsed = Object.keys(jeop.used[jeop.lang]).length >= maxQ * cats.length;
+  const allUsed = progress().used.length >= maxQ * cats.length;
   const fb = $('finalBtn');
-  fb.hidden = jeop.finalDone[jeop.lang];
+  fb.hidden = progress().finalDone;
   fb.textContent = b.rtl ? 'السؤال الأخير' : 'Final Jeopardy';
   fb.className = allUsed ? 'btn' : 'btn ghost';
 }
@@ -148,7 +156,7 @@ export function renderBoard(): void {
 function openQuestion(key: string): void {
   jeop.currentCell = key;
   const d = cellData(key);
-  if (jeop.dd[jeop.lang] === key && !jeop.used[jeop.lang][key]) {
+  if (progress().dailyDouble === key && !progress().used.includes(key)) {
     renderDailyDouble(d);
     return;
   }
@@ -272,7 +280,8 @@ function buildAwardRow(): void {
 }
 
 function finishCell(): void {
-  if (jeop.currentCell) jeop.used[jeop.lang][jeop.currentCell] = true;
+  if (jeop.currentCell) useClue(night, jeop.lang, jeop.currentCell);
+  saveNight();
   jeop.wager = 0;
   show('screen-board');
   renderBoard();
@@ -401,7 +410,8 @@ export function renderFinal(step: FinalStep): void {
         if (jeop.finalVerdicts[i] === true) award(i, jeop.finalWagers[i]);
         else if (jeop.finalVerdicts[i] === false) award(i, -jeop.finalWagers[i]);
       });
-      jeop.finalDone[jeop.lang] = true;
+      settleFinal(night, jeop.lang);
+      saveNight();
       renderFinal('settled');
     });
     return;
@@ -443,7 +453,7 @@ export function resumeJeopardy(): void {
   jeop.lang = board;
   jeop.wager = 0;
   jeop.currentCell = null;
-  if (jeop.finalDone[board]) {
+  if (boardProgress(night, board).finalDone) {
     renderFinal('settled');
     return;
   }

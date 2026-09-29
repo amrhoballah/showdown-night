@@ -132,7 +132,14 @@ export function initSetup(): void {
       addFfaPlayer();
     }
   });
-  selectMode('t2');
+  refreshSetup();
+}
+
+/** Redraw the setup from the night. A night with no mode yet (a fresh one)
+ *  starts as two teams; a restored night keeps its own setup, since choosing
+ *  a mode would clear it. */
+export function refreshSetup(): void {
+  if (!night.mode) selectMode('t2');
   renderModeGrid();
   renderSetupArea();
   renderScoreboard();

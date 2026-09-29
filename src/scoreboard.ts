@@ -25,6 +25,9 @@ import {
   earnedIn,
   confirmTurn,
   nextTurn,
+  turnsOf,
+  serialize,
+  deserialize,
   award as awardInNight,
   type Mode,
   type EntityId,
@@ -38,8 +41,47 @@ import { $, escapeHtml, currentScreen, onScreenChange, dataNum, toast } from './
 export { TEAM_COLORS, TEAM_NAME_DEFAULTS } from './night';
 
 /** Tonight's night. The only instance; the setup screen changes it through
- *  the night's operations. */
+ *  the night's operations. Loading or starting a new night refills this same
+ *  object, so every module's reference stays good. */
 export const night = newNight();
+
+// ---------- the saved night ----------
+
+const STORAGE_KEY = 'showdown-night';
+
+/** Save the night, overwriting the one saved night. Called after every
+ *  change. Storage can be unavailable (private windows, blocked site data);
+ *  the night then simply lives for this page only. */
+export function saveNight(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, serialize(night));
+  } catch {
+    // not saved; play carries on
+  }
+}
+
+/** Replace tonight with the saved night, or a fresh one if there's none or it
+ *  can't be read. */
+export function loadNight(): void {
+  let data: string | null = null;
+  try {
+    data = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    // no storage: start fresh
+  }
+  Object.assign(night, deserialize(data));
+}
+
+/** Clear tonight's entities, games and standings, and save that. */
+export function startNewNight(): void {
+  Object.assign(night, newNight());
+  saveNight();
+}
+
+/** How many turns have been confirmed in the game in progress, in total. */
+export function turnsTaken(): number {
+  return entitiesOf(night).reduce((sum, e) => sum + turnsOf(night, e.id), 0);
+}
 
 /** Read-only view of the night in the old shape. Positional: `scores[i]` is
  *  the game score of `entities()[i]` in the game in progress. Write through
@@ -198,7 +240,10 @@ function renderPanel(): void {
   });
 }
 
+/** Redraw the row. Every change to the night ends in a redraw, so this is
+ *  also where the night is saved. */
 export function renderScoreboard(): void {
+  saveNight();
   const row = $('scoreRow');
   $('endGameBtn').hidden = !gameInProgress(night);
   if (!night.mode) {
@@ -266,6 +311,7 @@ export function initScoreboard(): void {
 export function recordTurn(i: number): void {
   const e = entitiesOf(night)[i];
   if (e) confirmTurn(night, e.id);
+  saveNight();
 }
 
 /** Index of the entity whose turn is next (fewest turns), 0 if none. */

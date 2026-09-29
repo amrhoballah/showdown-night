@@ -71,6 +71,16 @@ export interface FinishedGame {
   scores: GameScores;
 }
 
+/** How far a Jeopardy board has got tonight. Whether it has been played is
+ *  derived from the finished games, not stored here. */
+export interface BoardProgress {
+  /** Clue keys ("category-row") already used. */
+  used: string[];
+  /** Where its Daily Double hides, once the board has been picked. */
+  dailyDouble: string | null;
+  finalDone: boolean;
+}
+
 export interface Night {
   mode: Mode;
   /** The teams, used in team mode. Kept while in free-for-all, as the old state did. */
@@ -80,6 +90,8 @@ export interface Night {
   /** Finished games, in play order. */
   games: FinishedGame[];
   current: GameInProgress | null;
+  /** Jeopardy progress per board. */
+  boards: Record<Board, BoardProgress>;
   nextId: EntityId;
 }
 
@@ -104,9 +116,21 @@ export interface EndedGame {
 
 /** A night with no mode chosen yet and the first two default teams named. */
 export function newNight(): Night {
-  const night: Night = { mode: null, teams: [], players: [], games: [], current: null, nextId: 1 };
+  const night: Night = {
+    mode: null,
+    teams: [],
+    players: [],
+    games: [],
+    current: null,
+    boards: { en: freshBoard(), ar: freshBoard() },
+    nextId: 1,
+  };
   night.teams = TEAM_NAME_DEFAULTS.slice(0, 2).map((name, i) => create(night, name, i));
   return night;
+}
+
+function freshBoard(): BoardProgress {
+  return { used: [], dailyDouble: null, finalDone: false };
 }
 
 function create(night: Night, name: string, slot: number): NightEntity {
@@ -180,8 +204,30 @@ export function startGame(night: Night, type: GameType, board?: Board): boolean 
   if (type === 'outburst' && night.mode === 'ffa') return false;
   if (type === 'jeopardy' && (!board || boardStatus(night, board) === 'played')) return false;
   night.current = { type, scores: {}, turns: {}, lastTurn: null };
-  if (type === 'jeopardy') night.current.board = board;
+  if (type === 'jeopardy' && board) {
+    night.current.board = board;
+    // A board's game always starts fresh; a played board can't be restarted.
+    night.boards[board] = freshBoard();
+  }
   return true;
+}
+
+// ---------- Jeopardy board progress ----------
+
+export function boardProgress(night: Night, board: Board): BoardProgress {
+  return night.boards[board];
+}
+
+export function hideDailyDouble(night: Night, board: Board, key: string): void {
+  night.boards[board].dailyDouble = key;
+}
+
+export function useClue(night: Night, board: Board, key: string): void {
+  if (!night.boards[board].used.includes(key)) night.boards[board].used.push(key);
+}
+
+export function settleFinal(night: Night, board: Board): void {
+  night.boards[board].finalDone = true;
 }
 
 /** A Jeopardy board tonight: not yet played, its game in progress, or played
@@ -379,4 +425,80 @@ export function standings(night: Night): Standing[] {
   return rows
     .map((r) => ({ ...r, place: 1 + rows.filter((o) => o.total > r.total).length }))
     .sort((a, b) => a.place - b.place);
+}
+
+// ---------- the saved night ----------
+
+/** Bump when the saved shape changes; an older saved night is then discarded. */
+const FORMAT_VERSION = 1;
+
+/** The whole night as text, for localStorage. Standings aren't included:
+ *  they are always derived from the game scores. */
+export function serialize(night: Night): string {
+  return JSON.stringify({ version: FORMAT_VERSION, night });
+}
+
+/** Read a saved night back. Anything unreadable - missing, corrupt, an
+ *  unknown version or the wrong shape - gives a fresh night instead, so a
+ *  bad save can never stop the app from loading. */
+export function deserialize(data: string | null): Night {
+  try {
+    const parsed = JSON.parse(data ?? '');
+    if (parsed?.version === FORMAT_VERSION && isNight(parsed.night)) return parsed.night;
+  } catch {
+    // fall through
+  }
+  return newNight();
+}
+
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+const isInt = (x: unknown): x is number => Number.isInteger(x);
+const isScores = (x: unknown) => isObj(x) && Object.values(x).every(isInt);
+const GAME_TYPES: readonly unknown[] = ['jeopardy', 'outburst', 'act', 'emoji', 'wavelength'];
+const BOARDS: readonly unknown[] = ['en', 'ar'];
+
+function isEntity(x: unknown): boolean {
+  return isObj(x) && isInt(x.id) && typeof x.name === 'string' && typeof x.color === 'string';
+}
+
+function isGame(x: unknown): boolean {
+  return (
+    isObj(x) &&
+    GAME_TYPES.includes(x.type) &&
+    (x.board === undefined || BOARDS.includes(x.board)) &&
+    isScores(x.scores)
+  );
+}
+
+function isBoardProgress(x: unknown): boolean {
+  return (
+    isObj(x) &&
+    Array.isArray(x.used) &&
+    x.used.every((k) => typeof k === 'string') &&
+    (x.dailyDouble === null || typeof x.dailyDouble === 'string') &&
+    typeof x.finalDone === 'boolean'
+  );
+}
+
+function isNight(x: unknown): x is Night {
+  if (!isObj(x)) return false;
+  const { mode, teams, players, games, current, boards, nextId } = x;
+  return (
+    (mode === null || mode === 'teams' || mode === 'ffa') &&
+    Array.isArray(teams) &&
+    teams.every(isEntity) &&
+    Array.isArray(players) &&
+    players.every(isEntity) &&
+    Array.isArray(games) &&
+    games.every((g) => isGame(g) && Array.isArray(g.entityIds) && g.entityIds.every(isInt)) &&
+    (current === null ||
+      (isGame(current) &&
+        isScores((current as Record<string, unknown>).turns) &&
+        ((current as Record<string, unknown>).lastTurn === null ||
+          isInt((current as Record<string, unknown>).lastTurn)))) &&
+    isObj(boards) &&
+    isBoardProgress(boards.en) &&
+    isBoardProgress(boards.ar) &&
+    isInt(nextId)
+  );
 }

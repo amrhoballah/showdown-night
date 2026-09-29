@@ -2,9 +2,10 @@
 
 import './styles.css';
 import { $, show, confirmBox, escapeHtml, onScreenChange, type ScreenId } from './ui';
-import { night, renderScoreboard, initScoreboard } from './scoreboard';
+import { night, renderScoreboard, initScoreboard, loadNight, startNewNight } from './scoreboard';
 import { startGame, endGame, gameInProgress, unevenTurns, type GameType } from './night';
-import { initSetup, flashNeedMode, hasPlayers } from './setup';
+import { initSetup, flashNeedMode, hasPlayers, refreshSetup } from './setup';
+import { showContinue, hasNightToContinue } from './continue';
 import {
   initJeopardy,
   startJeopardy,
@@ -115,7 +116,36 @@ async function launchScoring(type: GameType): Promise<void> {
   }
 }
 
+/** Ask before clearing the night; on yes, start a fresh one on Home. */
+async function newNight(): Promise<boolean> {
+  const yes = await confirmBox(
+    'This clears tonight&rsquo;s standings and every finished game. Start a new night?',
+    'Start a new night',
+  );
+  if (!yes) return false;
+  stopAllTimers();
+  startNewNight();
+  refreshSetup();
+  show('screen-home');
+  return true;
+}
+
+/** Continue the saved night: back into the game in progress, at the step
+ *  before whatever was mid-way, or Home. */
+function continueNight(): void {
+  const game = gameInProgress(night);
+  if (!game) {
+    show('screen-home');
+    return;
+  }
+  show(GAMES[game.type].screen);
+  GAMES[game.type].resume();
+}
+
 function main(): void {
+  // First, before anything draws: every redraw saves, and would otherwise
+  // overwrite the saved night with an empty one.
+  loadNight();
   initScoreboard();
   initResults();
   initSetup();
@@ -159,8 +189,11 @@ function main(): void {
     if (ok) finishGame();
   });
 
+  $('newNightBtn').addEventListener('click', () => newNight());
+
   show('screen-home');
   renderScoreboard();
+  if (hasNightToContinue()) showContinue(continueNight, () => newNight());
 }
 
 main();
