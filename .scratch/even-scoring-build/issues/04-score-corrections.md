@@ -8,9 +8,9 @@ Spec: [Even scoring across games](../../even-scoring/spec.md). Vocabulary: the d
 
 **Status:** ready-for-agent
 
-- [ ] Double-clicking a game-score chip during a game turns its number into a preselected input; Enter saves, Esc or blur cancels; a single click does nothing; holding the "This game" label is unaffected.
-- [ ] On Home, double-clicking a Tonight chip opens a panel under the row listing that entity's finished games (game type, editable game score, placement points earned); Enter saves; the panel closes with its × or Esc.
-- [ ] Correcting a finished game re-ranks it (place points and pie) and updates the night standings at once. Correcting the game in progress leaves the standings unchanged until it ends.
-- [ ] Only whole numbers are accepted. Negative game scores are accepted only in Jeopardy; elsewhere an on-screen message reads e.g. "Emoji scores can't go below 0" and nothing changes.
-- [ ] Corrections never change turn counts.
-- [ ] Tests cover correcting finished games and the game in progress, the negatives and whole-number rules, through the Night's operations.
+- [x] Double-clicking a game-score chip during a game turns its number into a preselected input; Enter saves, Esc or blur cancels; a single click does nothing; holding the "This game" label is unaffected.
+- [x] On Home, double-clicking a Tonight chip opens a panel under the row listing that entity's finished games (game type, editable game score, placement points earned); Enter saves; the panel closes with its × or Esc.
+- [x] Correcting a finished game re-ranks it (place points and pie) and updates the night standings at once. Correcting the game in progress leaves the standings unchanged until it ends.
+- [x] Only whole numbers are accepted. Negative game scores are accepted only in Jeopardy; elsewhere an on-screen message reads e.g. "Emoji scores can't go below 0" and nothing changes.
+- [x] Corrections never change turn counts. (No turn counts exist yet; `setGameScore` only writes game scores. Ticket 05 must keep it that way.)
+- [x] Tests cover correcting finished games and the game in progress, the negatives and whole-number rules, through the Night's operations.

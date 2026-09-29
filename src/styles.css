@@ -78,6 +78,39 @@ button:focus-visible, .pill:focus-visible, input:focus-visible{ outline:3px soli
 .score-label.hold:hover{ border-color:var(--ink-faint); }
 .score-label.hold.peeking{ color:var(--accent); border-color:var(--accent); border-style:solid; }
 .score-chip .place{ font-size:0.8rem; color:var(--ink-faint); font-weight:700; min-width:1ch; }
+.score-chip[data-id]{ user-select:none; }
+.score-input{
+  width:5.5ch; font-size:1.05rem; font-weight:700; text-align:right;
+  background:var(--bg); color:var(--ink); border:1px solid var(--accent); border-radius:8px; padding:2px 6px;
+}
+
+/* ---------- corrections panel (Home) ---------- */
+.correct-panel{
+  flex-basis:100%; background:var(--bg-raised); border:1px solid var(--line); border-radius:16px;
+  padding:14px 18px;
+}
+.correct-panel[hidden]{ display:none; }
+.panel-head{ display:flex; align-items:center; gap:10px; font-size:1.05rem; }
+.panel-head .swatch{ width:18px; height:18px; border-radius:50%; flex:none; }
+.panel-sub{ color:var(--ink-faint); font-size:0.9rem; }
+.panel-x{ margin-left:auto; background:none; border:none; color:var(--ink-dim); font-size:1.6rem; line-height:1; }
+.panel-x:hover{ color:var(--ink); }
+.panel-games{ display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:12px; }
+.panel-game{
+  display:flex; align-items:center; gap:10px; background:var(--bg-raised-2); border:1px solid var(--line);
+  border-radius:12px; padding:8px 12px;
+}
+.panel-name{ font-weight:600; color:var(--ink-dim); }
+.panel-name .mono{ color:var(--ink-faint); margin-right:4px; }
+.panel-earned{ color:var(--accent); font-weight:700; min-width:3ch; }
+.panel-hint{ color:var(--ink-faint); font-size:0.85rem; margin:10px 0 0; }
+
+.toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:110;
+  background:var(--alert); color:#2a0707; font-weight:700; font-size:1.1rem;
+  border-radius:999px; padding:12px 22px; box-shadow:var(--shadow); max-width:calc(100% - 32px);
+}
+.toast[hidden]{ display:none; }
 
 /* ---------- end-of-game results ---------- */
 .result-screen{ position:fixed; inset:0; z-index:60; background:var(--bg); overflow:auto; }

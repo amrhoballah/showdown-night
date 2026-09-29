@@ -205,6 +205,41 @@ export function finishedGames(night: Night): FinishedGame[] {
   return night.games;
 }
 
+// ---------- corrections ----------
+
+/** Which game a correction is for: the game in progress, or a finished game
+ *  by its index in `finishedGames()`. */
+export type GameRef = 'current' | number;
+
+/** Why a correction was refused. */
+export type CorrectionError = 'no-game' | 'not-whole' | 'negative' | 'not-in-game';
+
+/** Set an entity's game score directly. A finished game's placement points
+ *  and the night standings follow at once, since both are derived; the game
+ *  in progress still counts for nothing until it ends. Only whole numbers,
+ *  and negatives only in Jeopardy, where wagers can take a team below 0.
+ *  Returns null on success, or why it was refused (nothing changes). */
+export function setGameScore(
+  night: Night,
+  ref: GameRef,
+  id: EntityId,
+  value: number,
+): CorrectionError | null {
+  const game = ref === 'current' ? night.current : night.games[ref];
+  if (!game) return 'no-game';
+  if (!Number.isInteger(value)) return 'not-whole';
+  if (value < 0 && game.type !== 'jeopardy') return 'negative';
+  if (ref !== 'current' && !night.games[ref].entityIds.includes(id)) return 'not-in-game';
+  game.scores[id] = value;
+  return null;
+}
+
+/** The placement points each entity earned from a finished game, by id. */
+export function earnedIn(night: Night, index: number): Record<EntityId, number> {
+  const game = night.games[index];
+  return game ? placementOf(game) : {};
+}
+
 // ---------- scoring ----------
 
 /** Placement points for one game: place points 5 / 3 / 1 by rank (ties share

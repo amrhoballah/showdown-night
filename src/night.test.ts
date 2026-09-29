@@ -15,6 +15,8 @@ import {
   finishedGames,
   standings,
   placement,
+  setGameScore,
+  earnedIn,
   TEAM_COLORS,
   TEAM_NAME_DEFAULTS,
   type Night,
@@ -210,6 +212,77 @@ describe('night standings', () => {
     expect(gameInProgress(n)).toBeNull();
     setTeams(n, 3);
     expect(totals(n)).toEqual([0, 0, 0]);
+  });
+});
+
+describe('score corrections', () => {
+  it('re-rank a finished game and update the standings at once', () => {
+    // Jeopardy 800-900 is 32 / 40; corrected to 1400-900 it is 44 / 28.
+    const n = newNight();
+    setTeams(n, 2);
+    const [a, b] = entitiesOf(n);
+    play(n, 'jeopardy', [800, 900]);
+    expect(totals(n)).toEqual([32, 40]);
+    expect(setGameScore(n, 0, a.id, 1400)).toBeNull();
+    expect(totals(n)).toEqual([44, 28]);
+    expect(earnedIn(n, 0)).toEqual({ [a.id]: 44, [b.id]: 28 });
+  });
+
+  it('correct only the chosen finished game', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    const [, b] = entitiesOf(n);
+    play(n, 'emoji', [6, 4]);
+    play(n, 'emoji', [6, 4]);
+    setGameScore(n, 1, b.id, 8);
+    expect(finishedGames(n).map((g) => g.scores[b.id])).toEqual([4, 8]);
+  });
+
+  it('change only the game scores of the game in progress, not the standings', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    const [a] = entitiesOf(n);
+    startGame(n, 'emoji');
+    award(n, a.id, 2);
+    expect(setGameScore(n, 'current', a.id, 5)).toBeNull();
+    expect(gameScoreOf(n, a.id)).toBe(5);
+    expect(totals(n)).toEqual([0, 0]);
+  });
+
+  it('accept only whole numbers', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'emoji');
+    const [a] = entitiesOf(n);
+    expect(setGameScore(n, 'current', a.id, 2.5)).toBe('not-whole');
+    expect(setGameScore(n, 'current', a.id, NaN)).toBe('not-whole');
+    expect(gameScoreOf(n, a.id)).toBe(0);
+  });
+
+  it('accept negative game scores only in Jeopardy', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    const [a] = entitiesOf(n);
+    play(n, 'emoji', [3, 1]);
+    expect(setGameScore(n, 0, a.id, -1)).toBe('negative');
+    expect(finishedGames(n)[0].scores[a.id]).toBe(3);
+    play(n, 'jeopardy', [200, 400]);
+    expect(setGameScore(n, 1, a.id, -600)).toBeNull();
+    expect(finishedGames(n)[1].scores[a.id]).toBe(-600);
+  });
+
+  it('are refused without a game, or for an entity that did not play it', () => {
+    const n = newNight();
+    setFreeForAll(n);
+    addPlayer(n, 'Karim');
+    addPlayer(n, 'Hana');
+    const karim = entitiesOf(n)[0];
+    expect(setGameScore(n, 'current', karim.id, 1)).toBe('no-game');
+    expect(setGameScore(n, 3, karim.id, 1)).toBe('no-game');
+    play(n, 'emoji', [1, 2]);
+    const salma = addPlayer(n, 'Salma');
+    expect(setGameScore(n, 0, salma.id, 5)).toBe('not-in-game');
+    expect(totals(n)).toEqual([6, 12, 0]);
   });
 });
 

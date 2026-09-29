@@ -48,6 +48,20 @@ export function onScreenChange(fn: (id: ScreenId) => void): void {
   screenListeners.push(fn);
 }
 
+let toastTimer = 0;
+
+/** Show a short message at the bottom of the screen, e.g. why a correction
+ *  was refused. `message` may contain entities but never user text. */
+export function toast(message: string): void {
+  const el = $('toast');
+  el.innerHTML = message;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    el.hidden = true;
+  }, 3000);
+}
+
 /** Ask the host a yes/no question in a full-screen card, instead of a browser
  *  dialog that would be unreadable from across the room. Resolves true for
  *  yes; Esc, the cancel button or clicking outside the card resolve false. */

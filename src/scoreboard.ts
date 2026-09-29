@@ -20,10 +20,18 @@ import {
   gameInProgress,
   gameScoreOf,
   standings,
+  finishedGames,
+  setGameScore,
+  earnedIn,
   award as awardInNight,
   type Mode,
+  type EntityId,
+  type GameRef,
+  type GameType,
+  type CorrectionError,
 } from './night';
-import { $, escapeHtml, currentScreen, onScreenChange } from './ui';
+import { GAME_NAMES } from './results';
+import { $, escapeHtml, currentScreen, onScreenChange, dataNum, toast } from './ui';
 
 export { TEAM_COLORS, TEAM_NAME_DEFAULTS } from './night';
 
@@ -65,9 +73,10 @@ function inGame(): boolean {
   return !!gameInProgress(night) && s !== 'screen-home' && s !== 'screen-mafia';
 }
 
-function chip(color: string, name: string, value: number, place?: number): string {
+/** A scoreboard chip. With an `id`, double-clicking it starts a correction. */
+function chip(color: string, name: string, value: number, place?: number, id?: EntityId): string {
   return (
-    '<div class="score-chip">' +
+    `<div class="score-chip"${id === undefined ? '' : ` data-id="${id}"`}>` +
     (place === undefined ? '' : `<span class="place mono">${place}</span>`) +
     `<span class="swatch" style="background:${color}"></span>` +
     `<span class="name">${escapeHtml(name)}</span>` +
@@ -75,10 +84,116 @@ function chip(color: string, name: string, value: number, place?: number): strin
   );
 }
 
-function standingsChips(): string {
+function standingsChips(editable = false): string {
   return standings(night)
-    .map((s) => chip(s.entity.color, s.entity.name, s.total, s.place))
+    .map((s) => chip(s.entity.color, s.entity.name, s.total, s.place, editable ? s.entity.id : undefined))
     .join('');
+}
+
+// ---------- corrections ----------
+
+const ERROR_TEXT: Record<CorrectionError, (type: GameType) => string> = {
+  'not-whole': () => 'Scores must be whole numbers.',
+  negative: (type) => `${GAME_NAMES[type]} scores can&rsquo;t go below 0.`,
+  'no-game': () => 'That game is no longer there.',
+  'not-in-game': () => 'They didn&rsquo;t play that game.',
+};
+
+/** Parse what the host typed. Anything but an optional minus and digits is
+ *  not a whole number (NaN is refused by the night as not whole). */
+function parseScore(text: string): number {
+  const t = text.trim();
+  return /^-?\d+$/.test(t) ? Number(t) : NaN;
+}
+
+/** Try a correction; on refusal show why and leave everything as it was. */
+function correct(ref: GameRef, id: EntityId, text: string): boolean {
+  const type = ref === 'current' ? gameInProgress(night)?.type : finishedGames(night)[ref]?.type;
+  const err = setGameScore(night, ref, id, parseScore(text));
+  if (err) {
+    toast(ERROR_TEXT[err](type ?? 'emoji'));
+    return false;
+  }
+  return true;
+}
+
+/** Turn a game-score chip's number into a preselected input. Enter saves;
+ *  Esc or clicking away cancels. */
+function editChip(chipEl: HTMLElement, id: EntityId): void {
+  const val = chipEl.querySelector<HTMLElement>('.val');
+  if (!val || val.querySelector('input')) return;
+  val.innerHTML = `<input class="score-input mono" inputmode="numeric" value="${val.textContent}" aria-label="Game score">`;
+  const input = val.querySelector('input')!;
+  input.focus();
+  input.select();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (correct('current', id, input.value)) renderScoreboard();
+    } else if (e.key === 'Escape') {
+      renderScoreboard();
+    }
+  });
+  input.addEventListener('blur', () => renderScoreboard());
+}
+
+/** The entity whose finished games the corrections panel lists, if open. */
+let panelFor: EntityId | null = null;
+
+function openPanel(id: EntityId): void {
+  panelFor = id;
+  renderPanel();
+}
+
+function closePanel(): void {
+  panelFor = null;
+  renderPanel();
+}
+
+/** The panel under the row on Home: one entity's finished games tonight,
+ *  each with its game score editable and the placement points it earned. */
+function renderPanel(): void {
+  const panel = $('correctPanel');
+  const entity = entitiesOf(night).find((e) => e.id === panelFor);
+  if (!entity || currentScreen() !== 'screen-home') {
+    panelFor = null;
+    panel.hidden = true;
+    panel.innerHTML = '';
+    return;
+  }
+  const games = finishedGames(night)
+    .map((g, i) => ({ g, i }))
+    .filter(({ g }) => g.entityIds.includes(entity.id));
+
+  panel.hidden = false;
+  panel.innerHTML =
+    '<div class="panel-head">' +
+    `<span class="swatch" style="background:${entity.color}"></span>` +
+    `<strong>${escapeHtml(entity.name)}</strong><span class="panel-sub">tonight&rsquo;s games</span>` +
+    '<button class="panel-x" id="panelClose" aria-label="Close">&times;</button></div>' +
+    (games.length
+      ? '<div class="panel-games">' +
+        games
+          .map(
+            ({ g, i }, k) =>
+              '<label class="panel-game">' +
+              `<span class="panel-name"><span class="mono">${k + 1}</span> ${GAME_NAMES[g.type]}</span>` +
+              `<input class="score-input mono" data-game="${i}" inputmode="numeric" value="${g.scores[entity.id] ?? 0}">` +
+              `<span class="panel-earned mono">+${earnedIn(night, i)[entity.id] ?? 0}</span></label>`,
+          )
+          .join('') +
+        '</div><p class="panel-hint">Type a game score and press Enter.</p>'
+      : '<p class="panel-hint">No finished games yet.</p>');
+
+  $('panelClose').addEventListener('click', closePanel);
+  panel.querySelectorAll<HTMLInputElement>('input[data-game]').forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (!correct(dataNum(input, 'game'), entity.id, input.value)) return;
+      renderScoreboard();
+      renderPanel();
+      panel.querySelector<HTMLInputElement>(`input[data-game="${input.dataset.game}"]`)?.focus();
+    });
+  });
 }
 
 export function renderScoreboard(): void {
@@ -91,7 +206,14 @@ export function renderScoreboard(): void {
 
   if (!inGame()) {
     peeking = false;
-    row.innerHTML = '<span class="score-label">Tonight</span>' + standingsChips();
+    // Finished games are corrected from Home only.
+    const onHome = currentScreen() === 'screen-home';
+    row.innerHTML = '<span class="score-label">Tonight</span>' + standingsChips(onHome);
+    if (onHome) {
+      row.querySelectorAll<HTMLElement>('.score-chip').forEach((c) => {
+        c.addEventListener('dblclick', () => openPanel(dataNum(c, 'id')));
+      });
+    }
     return;
   }
 
@@ -102,7 +224,7 @@ export function renderScoreboard(): void {
     (peeking
       ? standingsChips()
       : entitiesOf(night)
-          .map((e) => chip(e.color, e.name, gameScoreOf(night, e.id)))
+          .map((e) => chip(e.color, e.name, gameScoreOf(night, e.id), undefined, e.id))
           .join(''));
 
   $('scoreHold').addEventListener('pointerdown', (e) => {
@@ -110,6 +232,11 @@ export function renderScoreboard(): void {
     peeking = true;
     renderScoreboard();
   });
+  if (!peeking) {
+    row.querySelectorAll<HTMLElement>('.score-chip').forEach((c) => {
+      c.addEventListener('dblclick', () => editChip(c, dataNum(c, 'id')));
+    });
+  }
 }
 
 /** Wire the listeners that live for the whole session. */
@@ -124,7 +251,13 @@ export function initScoreboard(): void {
   window.addEventListener('pointerup', release);
   window.addEventListener('pointercancel', release);
   window.addEventListener('blur', release);
-  onScreenChange(renderScoreboard);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelFor !== null) closePanel();
+  });
+  onScreenChange(() => {
+    renderScoreboard();
+    renderPanel();
+  });
 }
 
 /** Add (or, with a negative value, subtract) points for the entity at index
