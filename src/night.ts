@@ -14,6 +14,7 @@
  *  team count changes or a player is removed, as the old scoreboard did.
  */
 
+import type { Lang } from './types';
 import { WEIGHTS } from './weights';
 
 export const TEAM_COLORS = [
@@ -47,8 +48,13 @@ export interface NightEntity {
 /** Game scores by entity id. A missing id scores 0. */
 export type GameScores = Record<EntityId, number>;
 
+/** A Jeopardy board. Each board is its own game, played at most once a night. */
+export type Board = Lang;
+
 export interface GameInProgress {
   type: GameType;
+  /** Which board, for Jeopardy. */
+  board?: Board;
   scores: GameScores;
   /** Confirmed turns by entity id, in games that have turns. */
   turns: Record<EntityId, number>;
@@ -58,6 +64,8 @@ export interface GameInProgress {
 
 export interface FinishedGame {
   type: GameType;
+  /** Which board, for Jeopardy. */
+  board?: Board;
   /** The entities that played it, in order. Only they are ranked in it. */
   entityIds: EntityId[];
   scores: GameScores;
@@ -85,6 +93,7 @@ export interface Standing {
 /** What ending a game produces, for the result screens. */
 export interface EndedGame {
   type: GameType;
+  board?: Board;
   /** Each entity that played, with its final game score, in entity order. */
   gameScores: { entity: NightEntity; score: number }[];
   /** Placement points each entity earned from this game, by id. */
@@ -161,14 +170,26 @@ export function gameInProgress(night: Night): GameInProgress | null {
   return night.current;
 }
 
-/** Start a game of `type`. Refused (returns false) while another game is in
- *  progress, when there is nobody to play it, or for Outburst in free-for-all
- *  (one person shouting alone isn't Outburst). */
-export function startGame(night: Night, type: GameType): boolean {
+/** Start a game of `type` (and, for Jeopardy, on `board`). Refused (returns
+ *  false) while another game is in progress, when there is nobody to play it,
+ *  for Outburst in free-for-all (one person shouting alone isn't Outburst),
+ *  for Jeopardy without a board, or on a board already played tonight (its
+ *  clues and Daily Double are known). */
+export function startGame(night: Night, type: GameType, board?: Board): boolean {
   if (night.current || entitiesOf(night).length === 0) return false;
   if (type === 'outburst' && night.mode === 'ffa') return false;
+  if (type === 'jeopardy' && (!board || boardStatus(night, board) === 'played')) return false;
   night.current = { type, scores: {}, turns: {}, lastTurn: null };
+  if (type === 'jeopardy') night.current.board = board;
   return true;
+}
+
+/** A Jeopardy board tonight: not yet played, its game in progress, or played
+ *  (its game ended, at its Final or early). */
+export function boardStatus(night: Night, board: Board): 'fresh' | 'in-progress' | 'played' {
+  if (night.current?.type === 'jeopardy' && night.current.board === board) return 'in-progress';
+  if (night.games.some((g) => g.type === 'jeopardy' && g.board === board)) return 'played';
+  return 'fresh';
 }
 
 /** Add (or, with a negative value, subtract) points to an entity's game score
@@ -193,6 +214,7 @@ export function endGame(night: Night): EndedGame | null {
   const ents = entitiesOf(night);
   const game: FinishedGame = {
     type: current.type,
+    ...(current.board ? { board: current.board } : {}),
     entityIds: ents.map((e) => e.id),
     scores: { ...current.scores },
   };
@@ -200,6 +222,7 @@ export function endGame(night: Night): EndedGame | null {
   night.current = null;
   return {
     type: game.type,
+    board: game.board,
     gameScores: ents.map((entity) => ({ entity, score: game.scores[entity.id] ?? 0 })),
     earned: placementOf(game),
     before,

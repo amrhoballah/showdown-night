@@ -1,8 +1,9 @@
 /** Game 1 - bilingual Jeopardy.
  *
  *  Two independent boards (English and Arabic) with their own questions, their
- *  own hidden Daily Double and their own Final Jeopardy. Both boards award into
- *  the same shared scoreboard, so a night can mix them freely.
+ *  own hidden Daily Double and their own Final Jeopardy. Each board is its own
+ *  game in the night, started by picking it and played at most once a night;
+ *  settling Final Jeopardy is its natural finish.
  *
  *  Scoring rules, deliberately chosen:
  *  - A normal wrong answer costs nothing (keeps a party game friendly).
@@ -13,7 +14,9 @@
 
 import type { Board, Lang, Question, Category } from '../types';
 import { BOARDS } from '../data/boards';
-import { state, entities, award } from '../scoreboard';
+import { night, state, entities, award } from '../scoreboard';
+import { startGame, gameInProgress, boardStatus } from '../night';
+import { endGameNow } from '../results';
 import { $, show, escapeHtml, onClickAll, dataNum } from '../ui';
 
 interface JeopardyState {
@@ -75,24 +78,28 @@ export function renderPicker(): void {
     '<div class="lang-grid">' +
     LANGS.map((L) => {
       const b = BOARDS[L];
-      const started = Object.keys(jeop.used[L]).length;
+      const played = boardStatus(night, L) === 'played';
       return (
-        `<button class="lang-card" data-lang="${L}">` +
+        `<button class="lang-card" data-lang="${L}"${played ? ' disabled' : ''}>` +
         `<span class="big${b.rtl ? ' ar' : ''}">${b.label}</span>` +
         `<span class="meta${b.rtl ? ' ar' : ''}">${b.sub}</span>` +
-        `<span class="done">${started ? `${boardProgress(L)} used` : 'fresh board'}</span>` +
+        `<span class="done">${played ? 'Played tonight' : 'fresh board'}</span>` +
         '</button>'
       );
     }).join('') +
     '</div>' +
-    '<p class="sub">Each board has its own questions, its own hidden Daily Double, and its own ' +
-    'Final Jeopardy &mdash; so you can play one now and the other later. Points from both go to ' +
-    'the same scoreboard.</p>';
+    '<p class="sub">Each board is its own game, with its own questions, its own hidden Daily ' +
+    'Double and its own Final Jeopardy &mdash; so you can play one now and the other later. A ' +
+    'board can be played once a night.</p>';
 
-  onClickAll(card, '.lang-card', (btn) => {
-    boardChosen = true;
-    jeop.lang = btn.getAttribute('data-lang') as Lang;
-    if (!jeop.dd[jeop.lang]) pickDailyDouble(jeop.lang);
+  onClickAll(card, '.lang-card:not(:disabled)', (btn) => {
+    const lang = btn.getAttribute('data-lang') as Lang;
+    if (!startGame(night, 'jeopardy', lang)) return;
+    // A board's game always starts fresh: a played board can't be restarted.
+    jeop.lang = lang;
+    jeop.used[lang] = {};
+    jeop.finalDone[lang] = false;
+    pickDailyDouble(lang);
     show('screen-board');
     renderBoard();
   });
@@ -273,7 +280,7 @@ function finishCell(): void {
 
 /* ---------------- final jeopardy ---------------- */
 
-type FinalStep = 'wager' | 'question' | 'verdict' | 'standings';
+type FinalStep = 'wager' | 'question' | 'verdict' | 'settled';
 
 /** Final Jeopardy's 60-second clock. */
 let finalTimer = 0;
@@ -395,70 +402,58 @@ export function renderFinal(step: FinalStep): void {
         else if (jeop.finalVerdicts[i] === false) award(i, -jeop.finalWagers[i]);
       });
       jeop.finalDone[jeop.lang] = true;
-      renderFinal('standings');
+      renderFinal('settled');
     });
     return;
   }
 
-  // standings
-  const rows = entities()
-    .map((e, i) => ({ name: e.name, color: e.color, score: state.scores[i] || 0 }))
-    .sort((a, c) => c.score - a.score);
-
+  // settled: the natural finish. One button, no confirm, into the results.
   card.innerHTML =
-    `<p class="kicker">${b.rtl ? 'النتيجة النهائية' : 'Final standings'}</p>` +
-    `<h2 class="${b.rtl ? 'ar' : ''}">${escapeHtml(rows[0].name)}${
-      b.rtl ? ' في الصدارة' : ' takes it'
+    `<p class="kicker">${b.rtl ? 'السؤال الأخير' : 'Final Jeopardy'}</p>` +
+    `<h2 class="${b.rtl ? 'ar' : ''}">${
+      b.rtl ? 'انتهى السؤال الأخير.' : 'Final Jeopardy is settled.'
     }</h2>` +
-    '<div class="standings">' +
-    rows
-      .map(
-        (r, i) =>
-          `<div class="standing${i === 0 ? ' lead' : ''}"><span class="pos mono">${i + 1}</span>` +
-          `<span class="sw" style="width:16px;height:16px;border-radius:50%;background:${r.color}"></span>` +
-          `<span class="nm">${escapeHtml(r.name)}</span><span class="pts mono">${r.score}</span></div>`,
-      )
-      .join('') +
-    '</div>' +
-    `<div class="btn-row"><button class="btn ghost" id="fToPicker">${
-      b.rtl ? 'اللوحة الأخرى' : 'Play the other board'
-    }</button>` +
-    `<button class="btn ghost" id="fHome2">${b.rtl ? 'القائمة الرئيسية' : 'Home'}</button></div>`;
-
-  $('fToPicker').addEventListener('click', () => {
-    show('screen-jpicker');
-    renderPicker();
-  });
-  $('fHome2').addEventListener('click', () => show('screen-home'));
+    `<button class="btn${arCls}" id="fEnd">${b.rtl ? 'أنهِ اللعبة' : 'End game'}</button>`;
+  $('fEnd').addEventListener('click', endGameNow);
+  show('screen-final');
 }
 
 /* ---------------- game in progress ---------------- */
 
-/** Whether this Jeopardy game has chosen its board yet. */
-let boardChosen = false;
-
-/** A new Jeopardy game: pick a board. */
+/** Into Jeopardy with no board in progress: pick a board, which starts its
+ *  game. */
 export function startJeopardy(): void {
-  boardChosen = false;
   jeop.wager = 0;
   jeop.currentCell = null;
   show('screen-jpicker');
   renderPicker();
 }
 
-/** Back into the game in progress, at its board. An open clue, a placed
- *  Daily Double wager or a Final Jeopardy under way is dropped, so nothing
- *  secret is shown again and no wager stands half-played; the clue stays
- *  unused and Final Jeopardy can be started again. */
+/** Back into the board in progress, skipping the picker. An open clue, a
+ *  placed Daily Double wager or a Final Jeopardy under way is dropped, so
+ *  nothing secret is shown again and no wager stands half-played; the clue
+ *  stays unused and Final Jeopardy can be started again. A settled Final
+ *  returns to its End game prompt. */
 export function resumeJeopardy(): void {
-  if (!boardChosen) {
+  const board = gameInProgress(night)?.board;
+  if (!board) {
     startJeopardy();
     return;
   }
+  jeop.lang = board;
   jeop.wager = 0;
   jeop.currentCell = null;
+  if (jeop.finalDone[board]) {
+    renderFinal('settled');
+    return;
+  }
   show('screen-board');
   renderBoard();
+}
+
+/** Both boards have been played tonight, so there's no Jeopardy left. */
+export function bothBoardsPlayed(): boolean {
+  return LANGS.every((L) => boardStatus(night, L) === 'played');
 }
 
 /* ---------------- wiring ---------------- */
@@ -484,10 +479,6 @@ export function initJeopardy(): void {
   });
 
   $('boardDoneBtn').addEventListener('click', () => show('screen-home'));
-  $('boardSwitchBtn').addEventListener('click', () => {
-    show('screen-jpicker');
-    renderPicker();
-  });
   $('finalBtn').addEventListener('click', () => renderFinal('wager'));
   $('finalHomeBtn').addEventListener('click', () => {
     stopJeopardyTimer();

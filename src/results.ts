@@ -89,9 +89,64 @@ function next(): void {
   else show('screen-home');
 }
 
+/** Everything the result screens say, in one game's voice. Jeopardy keeps
+ *  its own winner line, and the Arabic board's results are wholly Arabic. */
+interface Copy {
+  finalScores: string;
+  wins: (name: string) => string;
+  tie: (names: string[]) => string;
+  everyoneTies: string;
+  toStandings: string;
+  spaceToStandings: string;
+  after: string;
+  standings: string;
+  home: string;
+  spaceHome: string;
+  next: string;
+  spaceNext: string;
+}
+
+function copyFor(r: EndedGame): Copy {
+  if (r.type === 'jeopardy' && r.board === 'ar') {
+    return {
+      finalScores: 'جيوباردي &middot; النتائج النهائية',
+      wins: (name) => `${name} في الصدارة`,
+      tie: (names) => `${names.join(' و')} في الصدارة معًا`,
+      everyoneTies: 'تعادل الجميع',
+      toStandings: 'ترتيب الليلة &larr;',
+      spaceToStandings: 'اضغط المسافة لترتيب الليلة',
+      after: 'الليلة &middot; بعد جيوباردي',
+      standings: 'ترتيب الليلة',
+      home: 'العودة إلى الرئيسية',
+      spaceHome: 'اضغط المسافة للعودة',
+      next: 'إلى اللعبة التالية &larr;',
+      spaceNext: 'اضغط المسافة للمتابعة',
+    };
+  }
+  const name = GAME_NAMES[r.type];
+  return {
+    finalScores: `${name} &middot; final scores`,
+    wins: (w) => (r.type === 'jeopardy' ? `${w} takes it` : `${w} wins`),
+    tie: (names) => `${names.join(' &amp; ')} tie for the win`,
+    everyoneTies: 'Everyone ties',
+    toStandings: 'Tonight&rsquo;s standings &rarr;',
+    spaceToStandings: 'Space for the standings',
+    after: `Tonight &middot; after ${name}`,
+    standings: 'Night standings',
+    home: 'Back to Home',
+    spaceHome: 'Space for Home',
+    next: 'On to the next game &rarr;',
+    spaceNext: 'Space to carry on',
+  };
+}
+
 export function renderResult(): void {
   if (!result) return;
   stopResultTimers();
+  const ar = result.type === 'jeopardy' && result.board === 'ar';
+  const card = $('resultCard');
+  card.className = `result-card${ar ? ' ar' : ''}`;
+  card.dir = ar ? 'rtl' : 'ltr';
   if (beat === 1) renderScores(result);
   else renderStandings(result);
 }
@@ -102,16 +157,17 @@ function renderScores(r: EndedGame): void {
   const top = ranked[0]?.score ?? 0;
   const winners = ranked.filter((g) => g.score === top).map((g) => g.entity);
   const everyoneTies = winners.length === ranked.length;
+  const t = copyFor(r);
   const title = everyoneTies && winners.length > 2
-    ? 'Everyone ties'
+    ? t.everyoneTies
     : winners.length > 1
-      ? `${winners.map((w) => escapeHtml(w.name)).join(' &amp; ')} tie for the win`
-      : `${escapeHtml(winners[0].name)} wins`;
+      ? t.tie(winners.map((w) => escapeHtml(w.name)))
+      : t.wins(escapeHtml(winners[0].name));
   const twoCol = ranked.length > 6;
 
   $('resultCard').innerHTML =
     '<div class="result-head">' +
-    `<p class="eyebrow">${GAME_NAMES[r.type]} &middot; final scores</p>` +
+    `<p class="eyebrow">${t.finalScores}</p>` +
     `<h1 class="result-title">${title}</h1></div>` +
     `<div class="result-scores${twoCol ? ' two-col' : ''}" ` +
     `style="grid-template-rows:repeat(${Math.ceil(ranked.length / 2)}, auto)">` +
@@ -125,14 +181,15 @@ function renderScores(r: EndedGame): void {
       )
       .join('') +
     '</div>' +
-    '<div class="result-foot"><span class="result-hint">Space for the standings</span>' +
-    '<button class="btn" id="resultNext">Tonight&rsquo;s standings &rarr;</button></div>';
+    `<div class="result-foot"><span class="result-hint">${t.spaceToStandings}</span>` +
+    `<button class="btn" id="resultNext">${t.toStandings}</button></div>`;
   $('resultNext').addEventListener('click', next);
 
   if (!everyoneTies && !reducedMotion()) confetti(winners.map((w) => w.color));
 }
 
 function renderStandings(r: EndedGame): void {
+  const t = copyFor(r);
   const n = r.before.length;
   const rowH = n > 6 ? 44 : 84;
   const slide = !reducedMotion();
@@ -159,14 +216,11 @@ function renderStandings(r: EndedGame): void {
 
   $('resultCard').innerHTML =
     '<div class="result-head">' +
-    `<p class="eyebrow">Tonight &middot; after ${GAME_NAMES[r.type]}</p>` +
-    '<h1 class="result-title">Night standings</h1></div>' +
+    `<p class="eyebrow">${t.after}</p>` +
+    `<h1 class="result-title">${t.standings}</h1></div>` +
     `<div class="race" style="height:${n * rowH}px">${rows}</div>` +
-    (afterResults
-      ? '<div class="result-foot"><span class="result-hint">Space to carry on</span>' +
-        '<button class="btn" id="resultHome">On to the next game &rarr;</button></div>'
-      : '<div class="result-foot"><span class="result-hint">Space for Home</span>' +
-        '<button class="btn" id="resultHome">Back to Home</button></div>');
+    `<div class="result-foot"><span class="result-hint">${afterResults ? t.spaceNext : t.spaceHome}</span>` +
+    `<button class="btn" id="resultHome">${afterResults ? t.next : t.home}</button></div>`;
   $('resultHome').addEventListener('click', next);
 
   if (!slide) return;

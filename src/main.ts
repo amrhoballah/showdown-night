@@ -5,7 +5,13 @@ import { $, show, confirmBox, escapeHtml, onScreenChange, type ScreenId } from '
 import { night, renderScoreboard, initScoreboard } from './scoreboard';
 import { startGame, endGame, gameInProgress, unevenTurns, type GameType } from './night';
 import { initSetup, flashNeedMode, hasPlayers } from './setup';
-import { initJeopardy, startJeopardy, resumeJeopardy, stopJeopardyTimer } from './games/jeopardy';
+import {
+  initJeopardy,
+  startJeopardy,
+  resumeJeopardy,
+  stopJeopardyTimer,
+  bothBoardsPlayed,
+} from './games/jeopardy';
 import {
   initOutburst,
   startOutburst,
@@ -48,6 +54,11 @@ function renderLaunchCards(): void {
     $(GAMES[type].button).textContent =
       type === current ? `Resume ${GAME_NAMES[type]}` : launchLabels[type];
   });
+  const trivia = $('launchTrivia') as HTMLButtonElement;
+  const noBoardsLeft = current !== 'jeopardy' && bothBoardsPlayed();
+  if (noBoardsLeft) trivia.textContent = 'Both boards played tonight';
+  trivia.disabled = noBoardsLeft;
+
   const teamsOnly = night.mode === 'ffa';
   $('launchOutburst').hidden = teamsOnly;
   $('outburstTeamsOnly').hidden = !teamsOnly;
@@ -63,7 +74,8 @@ function finishGame(then?: () => void): void {
 }
 
 function startNew(type: GameType): void {
-  if (!startGame(night, type)) return;
+  // Jeopardy's game starts when the host picks a board, in its picker.
+  if (type !== 'jeopardy' && !startGame(night, type)) return;
   show(GAMES[type].screen);
   GAMES[type].start();
 }

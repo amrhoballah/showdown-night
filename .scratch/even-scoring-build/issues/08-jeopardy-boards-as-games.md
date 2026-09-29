@@ -8,10 +8,10 @@ Spec: [Even scoring across games](../../even-scoring/spec.md). Vocabulary: the d
 
 **Status:** ready-for-agent
 
-- [ ] Choosing a board in the picker starts a Jeopardy game for that board. Launching Jeopardy while a board is in progress goes straight into that board, skipping the picker.
-- [ ] A board whose game has ended shows "Played tonight" in the picker and can't be started again until New night; leftover clues aren't kept. With both played, Jeopardy's Home card reads "Both boards played tonight" (the Night refuses a played board; tested).
-- [ ] Final Jeopardy settled shows "Final Jeopardy is settled" with one End game button (no confirm). Jeopardy's own "Final standings" screen and "Play the other board" are removed.
-- [ ] Jeopardy's winner line on beat 1 reads "<winner> takes it" (English) or "<winner> في الصدارة" (Arabic).
-- [ ] An Arabic-board game's result screens are fully in Arabic, with `dir="rtl"`, the `.ar` class and the Cairo typeface.
-- [ ] CLAUDE.md's Jeopardy rules still hold: a wrong normal clue costs nothing; Daily Double and Final wagers swing both ways; Final wagers are capped at the team's current score; the Daily Double never sits in the 100 row.
-- [ ] By hand: play the Arabic board to its Final and check both result screens right to left in Cairo; a Daily Double still adds and subtracts.
+- [x] Choosing a board in the picker starts a Jeopardy game for that board. Launching Jeopardy while a board is in progress goes straight into that board, skipping the picker.
+- [x] A board whose game has ended shows "Played tonight" in the picker and can't be started again until New night; leftover clues aren't kept. With both played, Jeopardy's Home card reads "Both boards played tonight" (the Night refuses a played board; tested).
+- [x] Final Jeopardy settled shows "Final Jeopardy is settled" with one End game button (no confirm). Jeopardy's own "Final standings" screen and "Play the other board" are removed.
+- [x] Jeopardy's winner line on beat 1 reads "<winner> takes it" (English) or "<winner> في الصدارة" (Arabic).
+- [x] An Arabic-board game's result screens are fully in Arabic, with `dir="rtl"`, the `.ar` class and the Cairo typeface.
+- [x] CLAUDE.md's Jeopardy rules still hold: a wrong normal clue costs nothing; Daily Double and Final wagers swing both ways; Final wagers are capped at the team's current score; the Daily Double never sits in the 100 row.
+- [x] By hand: play the Arabic board to its Final and check both result screens right to left in Cairo; a Daily Double still adds and subtracts.

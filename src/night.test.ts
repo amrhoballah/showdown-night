@@ -22,9 +22,11 @@ import {
   nextTurn,
   unevenTurns,
   fullLaps,
+  boardStatus,
   TEAM_COLORS,
   TEAM_NAME_DEFAULTS,
   type Night,
+  type Board,
   type GameType,
 } from './night';
 import { WEIGHTS } from './weights';
@@ -35,9 +37,10 @@ const gameScores = (n: Night) => entitiesOf(n).map((e) => gameScoreOf(n, e.id));
 const totals = (n: Night) =>
   entitiesOf(n).map((e) => standings(n).find((s) => s.entity.id === e.id)!.total);
 
-/** Play a whole game: start it, award each entity its game score, end it. */
-function play(n: Night, type: GameType, scores: number[]): void {
-  startGame(n, type);
+/** Play a whole game: start it, award each entity its game score, end it.
+ *  Jeopardy plays the English board unless another is given. */
+function play(n: Night, type: GameType, scores: number[], board: Board = 'en'): void {
+  startGame(n, type, board);
   entitiesOf(n).forEach((e, i) => award(n, e.id, scores[i] ?? 0));
   endGame(n);
 }
@@ -80,7 +83,7 @@ describe('game scores', () => {
   it('start at 0 and add up in the game in progress, including negative awards', () => {
     const n = newNight();
     setTeams(n, 2);
-    startGame(n, 'jeopardy');
+    startGame(n, 'jeopardy', 'en');
     const [a, b] = entitiesOf(n);
     award(n, a.id, 400);
     award(n, a.id, -600);
@@ -175,6 +178,56 @@ describe('a game in progress', () => {
     play(n, 'emoji', [6, 4]);
     expect(finishedGames(n)).toHaveLength(2);
     expect(totals(n)).toEqual([22, 14]);
+  });
+});
+
+describe('Jeopardy boards', () => {
+  it('are separate games, each with its own placement points', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    play(n, 'jeopardy', [800, 900], 'en');
+    play(n, 'jeopardy', [900, 800], 'ar');
+    expect(finishedGames(n).map((g) => g.board)).toEqual(['en', 'ar']);
+    expect(totals(n)).toEqual([72, 72]);
+  });
+
+  it('start only with a board', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    expect(startGame(n, 'jeopardy')).toBe(false);
+    expect(startGame(n, 'jeopardy', 'ar')).toBe(true);
+    expect(gameInProgress(n)?.board).toBe('ar');
+  });
+
+  it('are fresh, in progress, then played for the rest of the night', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    expect(boardStatus(n, 'en')).toBe('fresh');
+    startGame(n, 'jeopardy', 'en');
+    expect(boardStatus(n, 'en')).toBe('in-progress');
+    expect(boardStatus(n, 'ar')).toBe('fresh');
+    const ended = endGame(n)!;
+    expect(ended.board).toBe('en');
+    expect(boardStatus(n, 'en')).toBe('played');
+  });
+
+  it('can each be played only once a night, even when ended early', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'en');
+    endGame(n);
+    expect(startGame(n, 'jeopardy', 'en')).toBe(false);
+    expect(startGame(n, 'jeopardy', 'ar')).toBe(true);
+    endGame(n);
+    expect(startGame(n, 'jeopardy', 'ar')).toBe(false);
+  });
+
+  it('are fresh again once the night is cleared', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    play(n, 'jeopardy', [1, 0], 'en');
+    setTeams(n, 3);
+    expect(boardStatus(n, 'en')).toBe('fresh');
   });
 });
 
@@ -322,7 +375,7 @@ describe('turns', () => {
     for (const type of ['emoji', 'jeopardy'] as const) {
       const n = newNight();
       setTeams(n, 2);
-      startGame(n, type);
+      startGame(n, type, 'en');
       turns(n, 0, 0);
       expect(counts(n)).toEqual([0, 0]);
       expect(nextTurn(n)).toBeNull();
