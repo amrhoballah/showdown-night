@@ -55,8 +55,3 @@ export interface MafiaPlayer {
   alive: boolean;
 }
 
-/** A team or, in free-for-all, a single player. */
-export interface Entity {
-  name: string;
-  color: string;
-}

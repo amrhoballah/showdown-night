@@ -1,81 +1,280 @@
-/** Who is playing and what they have scored.
+/** Tonight's night and the sticky scoreboard row.
  *
- *  Every game awards points through `award()`, so the sticky scoreboard at the
- *  top of the screen is the single running total for the whole night. Mafia is
- *  the deliberate exception - it tracks its own players and win condition and
- *  never touches these scores.
+ *  The night itself - entities, the game in progress, finished games,
+ *  standings - is the pure Night module (`night.ts`). This module holds the
+ *  one instance of it, saves it to localStorage after every change, and draws
+ *  the row. Game modules change the night through its operations, then call
+ *  `renderScoreboard()`, which redraws and saves. Mafia is the deliberate
+ *  exception: it tracks its own players and win condition and never touches
+ *  the night's scores.
+ *
+ *  The row shows the game in progress's game scores under "This game" while
+ *  its screens are up. Holding that label shows the night standings under
+ *  "Tonight" until release. Everywhere else (Home, Mafia) it shows the
+ *  standings.
  */
 
-import type { Entity } from './types';
-import { $, escapeHtml } from './ui';
+import {
+  newNight,
+  entitiesOf,
+  allEntitiesOf,
+  gameInProgress,
+  gameScoreOf,
+  standings,
+  finishedGames,
+  setGameScore,
+  earnedIn,
+  serialize,
+  deserialize,
+  type EntityId,
+  type GameRef,
+  type GameType,
+  type CorrectionError,
+} from './night';
+import { GAME_NAMES } from './results';
+import { $, escapeHtml, currentScreen, onScreenChange, dataNum, toast } from './ui';
 
-export const TEAM_COLORS = [
-  'var(--team-0)',
-  'var(--team-1)',
-  'var(--team-2)',
-  'var(--team-3)',
-];
 
-export const TEAM_NAME_DEFAULTS = [
-  'Wlad El Balad',
-  'El Captains',
-  'Sons of the Nile',
-  'El Batal Crew',
-];
+/** Tonight's night. The only instance; the setup screen changes it through
+ *  the night's operations. Loading or starting a new night refills this same
+ *  object, so every module's reference stays good. */
+export const night = newNight();
 
-export type Mode = 'teams' | 'ffa' | null;
+// ---------- the saved night ----------
 
-export interface AppState {
-  mode: Mode;
-  teamCount: number;
-  teamNames: string[];
-  ffaPlayers: { name: string }[];
-  scores: number[];
-}
+const STORAGE_KEY = 'showdown-night';
 
-export const state: AppState = {
-  mode: null,
-  teamCount: 2,
-  teamNames: TEAM_NAME_DEFAULTS.slice(0, 2),
-  ffaPlayers: [],
-  scores: [],
-};
-
-/** The current scoring units: teams, or individual players in free-for-all. */
-export function entities(): Entity[] {
-  if (state.mode === 'ffa') {
-    return state.ffaPlayers.map((p, i) => ({ name: p.name, color: TEAM_COLORS[i % 4] }));
+/** Save the night, overwriting the one saved night. Called after every
+ *  change. Storage can be unavailable (private windows, blocked site data);
+ *  the night then simply lives for this page only. */
+export function saveNight(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, serialize(night));
+  } catch {
+    // not saved; play carries on
   }
-  return state.teamNames.map((n, i) => ({ name: n, color: TEAM_COLORS[i % 4] }));
 }
 
-/** Keep the scores array the same length as the entity list. */
-export function ensureScores(): void {
-  const n = entities().length;
-  while (state.scores.length < n) state.scores.push(0);
-  state.scores.length = n;
-}
-
-export function renderScoreboard(): void {
-  const row = $('scoreRow');
-  if (!state.mode) {
-    row.innerHTML = '';
-    return;
+/** Replace tonight with the saved night, or a fresh one if there's none or it
+ *  can't be read. */
+export function loadNight(): void {
+  let data: string | null = null;
+  try {
+    data = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    // no storage: start fresh
   }
-  ensureScores();
-  row.innerHTML = entities()
-    .map(
-      (e, i) =>
-        `<div class="score-chip"><span class="swatch" style="background:${e.color}"></span>` +
-        `<span class="name">${escapeHtml(e.name)}</span>` +
-        `<span class="val mono">${state.scores[i]}</span></div>`,
-    )
+  Object.assign(night, deserialize(data));
+}
+
+/** Clear tonight's entities, games and standings, and save that. */
+export function startNewNight(): void {
+  Object.assign(night, newNight());
+  saveNight();
+}
+
+/** True while the host is holding "This game" to see the standings. */
+let peeking = false;
+
+/** The game's own screens are up (not Home, and not Mafia, which isn't a game
+ *  in the night). */
+function inGame(): boolean {
+  const s = currentScreen();
+  return !!gameInProgress(night) && s !== 'screen-home' && s !== 'screen-mafia';
+}
+
+/** A scoreboard chip. With an `id`, double-clicking it starts a correction. */
+function chip(color: string, name: string, value: number, place?: number, id?: EntityId): string {
+  return (
+    `<div class="score-chip"${id === undefined ? '' : ` data-id="${id}"`}>` +
+    (place === undefined ? '' : `<span class="place mono">${place}</span>`) +
+    `<span class="swatch" style="background:${color}"></span>` +
+    `<span class="name">${escapeHtml(name)}</span>` +
+    `<span class="val mono">${value}</span></div>`
+  );
+}
+
+function standingsChips(editable = false): string {
+  return standings(night)
+    .map((s) => chip(s.entity.color, s.entity.name, s.total, s.place, editable ? s.entity.id : undefined))
     .join('');
 }
 
-/** Add (or, with a negative value, subtract) points for one entity. */
-export function award(i: number, pts: number): void {
-  ensureScores();
-  state.scores[i] = (state.scores[i] || 0) + pts;
-  renderScoreboard();
+// ---------- corrections ----------
+
+const ERROR_TEXT: Record<CorrectionError, (type: GameType) => string> = {
+  'not-whole': () => 'Scores must be whole numbers.',
+  negative: (type) => `${GAME_NAMES[type]} scores can&rsquo;t go below 0.`,
+  'no-game': () => 'That game is no longer there.',
+  'not-in-game': () => 'They didn&rsquo;t play that game.',
+};
+
+/** Parse what the host typed. Anything but an optional minus and digits is
+ *  not a whole number (NaN is refused by the night as not whole). */
+function parseScore(text: string): number {
+  const t = text.trim();
+  return /^-?\d+$/.test(t) ? Number(t) : NaN;
+}
+
+/** Try a correction; on refusal show why and leave everything as it was. */
+function correct(ref: GameRef, id: EntityId, text: string): boolean {
+  const type = ref === 'current' ? gameInProgress(night)?.type : finishedGames(night)[ref]?.type;
+  const err = setGameScore(night, ref, id, parseScore(text));
+  if (err) {
+    toast(ERROR_TEXT[err](type ?? 'emoji'));
+    return false;
+  }
+  return true;
+}
+
+/** Turn a game-score chip's number into a preselected input. Enter saves;
+ *  Esc or clicking away cancels. */
+function editChip(chipEl: HTMLElement, id: EntityId): void {
+  const val = chipEl.querySelector<HTMLElement>('.val');
+  if (!val || val.querySelector('input')) return;
+  val.innerHTML = `<input class="score-input mono" inputmode="numeric" value="${val.textContent}" aria-label="Game score">`;
+  const input = val.querySelector('input')!;
+  input.focus();
+  input.select();
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      if (correct('current', id, input.value)) renderScoreboard();
+    } else if (e.key === 'Escape') {
+      renderScoreboard();
+    }
+  });
+  input.addEventListener('blur', () => renderScoreboard());
+}
+
+/** The entity whose finished games the corrections panel lists, if open. */
+let panelFor: EntityId | null = null;
+
+function openPanel(id: EntityId): void {
+  panelFor = id;
+  renderPanel();
+}
+
+/** Open an entity's finished games for correction, e.g. from the Left list. */
+export function openCorrections(id: EntityId): void {
+  openPanel(id);
+}
+
+function closePanel(): void {
+  panelFor = null;
+  renderPanel();
+}
+
+/** The panel under the row on Home: one entity's finished games tonight,
+ *  each with its game score editable and the placement points it earned. */
+function renderPanel(): void {
+  const panel = $('correctPanel');
+  // Left entities stay correctable, so look among everyone.
+  const entity = allEntitiesOf(night).find((e) => e.id === panelFor);
+  if (!entity || currentScreen() !== 'screen-home') {
+    panelFor = null;
+    panel.hidden = true;
+    panel.innerHTML = '';
+    return;
+  }
+  const games = finishedGames(night)
+    .map((g, i) => ({ g, i }))
+    .filter(({ g }) => g.entityIds.includes(entity.id));
+
+  panel.hidden = false;
+  panel.innerHTML =
+    '<div class="panel-head">' +
+    `<span class="swatch" style="background:${entity.color}"></span>` +
+    `<strong>${escapeHtml(entity.name)}</strong><span class="panel-sub">tonight&rsquo;s games</span>` +
+    '<button class="panel-x" id="panelClose" aria-label="Close">&times;</button></div>' +
+    (games.length
+      ? '<div class="panel-games">' +
+        games
+          .map(
+            ({ g, i }, k) =>
+              '<label class="panel-game">' +
+              `<span class="panel-name"><span class="mono">${k + 1}</span> ${GAME_NAMES[g.type]}</span>` +
+              `<input class="score-input mono" data-game="${i}" inputmode="numeric" value="${g.scores[entity.id] ?? 0}">` +
+              `<span class="panel-earned mono">+${earnedIn(night, i)[entity.id] ?? 0}</span></label>`,
+          )
+          .join('') +
+        '</div><p class="panel-hint">Type a game score and press Enter.</p>'
+      : '<p class="panel-hint">No finished games yet.</p>');
+
+  $('panelClose').addEventListener('click', closePanel);
+  panel.querySelectorAll<HTMLInputElement>('input[data-game]').forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (!correct(dataNum(input, 'game'), entity.id, input.value)) return;
+      renderScoreboard();
+      renderPanel();
+      panel.querySelector<HTMLInputElement>(`input[data-game="${input.dataset.game}"]`)?.focus();
+    });
+  });
+}
+
+/** Redraw the row. Every change to the night ends in a redraw, so this is
+ *  also where the night is saved. */
+export function renderScoreboard(): void {
+  saveNight();
+  const row = $('scoreRow');
+  $('endGameBtn').hidden = !gameInProgress(night);
+  if (!night.mode) {
+    row.innerHTML = '';
+    return;
+  }
+
+  if (!inGame()) {
+    peeking = false;
+    // Finished games are corrected from Home only.
+    const onHome = currentScreen() === 'screen-home';
+    row.innerHTML = '<span class="score-label">Tonight</span>' + standingsChips(onHome);
+    if (onHome) {
+      row.querySelectorAll<HTMLElement>('.score-chip').forEach((c) => {
+        c.addEventListener('dblclick', () => openPanel(dataNum(c, 'id')));
+      });
+    }
+    return;
+  }
+
+  row.innerHTML =
+    `<button class="score-label hold${peeking ? ' peeking' : ''}" id="scoreHold" ` +
+    'title="Hold to see tonight&rsquo;s standings">' +
+    `${peeking ? 'Tonight' : 'This game'}</button>` +
+    (peeking
+      ? standingsChips()
+      : entitiesOf(night)
+          .map((e) => chip(e.color, e.name, gameScoreOf(night, e.id), undefined, e.id))
+          .join(''));
+
+  $('scoreHold').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    peeking = true;
+    renderScoreboard();
+  });
+  if (!peeking) {
+    row.querySelectorAll<HTMLElement>('.score-chip').forEach((c) => {
+      c.addEventListener('dblclick', () => editChip(c, dataNum(c, 'id')));
+    });
+  }
+}
+
+/** Wire the listeners that live for the whole session. */
+export function initScoreboard(): void {
+  // Release anywhere - the label is redrawn under the pointer, and the host
+  // may drag off it - snaps the row back to this game.
+  const release = () => {
+    if (!peeking) return;
+    peeking = false;
+    renderScoreboard();
+  };
+  window.addEventListener('pointerup', release);
+  window.addEventListener('pointercancel', release);
+  window.addEventListener('blur', release);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panelFor !== null) closePanel();
+  });
+  onScreenChange(() => {
+    renderScoreboard();
+    renderPanel();
+  });
 }

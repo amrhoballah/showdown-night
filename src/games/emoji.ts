@@ -5,7 +5,9 @@
  */
 
 import { EMOJI } from '../data/emoji';
-import { entities, award } from '../scoreboard';
+import { night, renderScoreboard } from '../scoreboard';
+import { entitiesOf, award } from '../night';
+import { endGameNow } from '../results';
 import { $, show, escapeHtml, shuffle, onClickAll, dataNum } from '../ui';
 
 const em = {
@@ -23,22 +25,20 @@ function reset(): void {
 export function renderEmoji(): void {
   const card = $('emojiCard');
 
+  // Natural finish: one deck is one game. Playing again is a new game from Home.
   if (em.idx >= em.deck.length) {
     card.innerHTML =
       '<p class="kicker">All riddles used</p>' +
-      '<h2>That&rsquo;s the whole deck.</h2>' +
-      '<button class="btn" id="emReset">Reshuffle and go again</button>';
+      '<h2>That&rsquo;s every riddle.</h2>' +
+      '<button class="btn" id="emEnd">End game</button>';
     $('emojiProgress').textContent = 'Finished';
-    $('emReset').addEventListener('click', () => {
-      reset();
-      renderEmoji();
-    });
+    $('emEnd').addEventListener('click', endGameNow);
     return;
   }
 
   const item = em.deck[em.idx];
   $('emojiProgress').textContent = `Riddle ${em.idx + 1} of ${em.deck.length}`;
-  const ents = entities();
+  const ents = entitiesOf(night);
 
   card.innerHTML =
     `<p class="kicker">${item.h}</p>` +
@@ -49,8 +49,8 @@ export function renderEmoji(): void {
         '<div class="btn-row">' +
         ents
           .map(
-            (e, i) =>
-              `<button class="award-btn" data-i="${i}"><span class="sw" style="background:${e.color}"></span>` +
+            (e) =>
+              `<button class="award-btn" data-id="${e.id}"><span class="sw" style="background:${e.color}"></span>` +
               `+1 ${escapeHtml(e.name)}</button>`,
           )
           .join('') +
@@ -60,7 +60,8 @@ export function renderEmoji(): void {
 
   if (em.revealed) {
     onClickAll(card, '.award-btn', (btn) => {
-      award(dataNum(btn, 'i'), 1);
+      award(night, dataNum(btn, 'id'), 1);
+      renderScoreboard();
       em.idx++;
       em.revealed = false;
       renderEmoji();
@@ -76,6 +77,17 @@ export function renderEmoji(): void {
       renderEmoji();
     });
   }
+}
+
+/** A new Emoji game: a freshly shuffled deck. */
+export function startEmoji(): void {
+  reset();
+  renderEmoji();
+}
+
+/** Back into the game in progress, on the riddle it was on. */
+export function resumeEmoji(): void {
+  renderEmoji();
 }
 
 export function initEmoji(): void {

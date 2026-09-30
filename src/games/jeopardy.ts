@@ -1,8 +1,9 @@
 /** Game 1 - bilingual Jeopardy.
  *
  *  Two independent boards (English and Arabic) with their own questions, their
- *  own hidden Daily Double and their own Final Jeopardy. Both boards award into
- *  the same shared scoreboard, so a night can mix them freely.
+ *  own hidden Daily Double and their own Final Jeopardy. Each board is its own
+ *  game in the night, started by picking it and played at most once a night;
+ *  settling Final Jeopardy is its natural finish.
  *
  *  Scoring rules, deliberately chosen:
  *  - A normal wrong answer costs nothing (keeps a party game friendly).
@@ -13,34 +14,61 @@
 
 import type { Board, Lang, Question, Category } from '../types';
 import { BOARDS } from '../data/boards';
-import { state, entities, award } from '../scoreboard';
+import { night, renderScoreboard, saveNight } from '../scoreboard';
+import {
+  entitiesOf,
+  award,
+  gameScoreOf,
+  type EntityId,
+  startGame,
+  gameInProgress,
+  boardStatus,
+  boardProgress,
+  hideDailyDouble,
+  useClue,
+  settleFinal,
+} from '../night';
+import { endGameNow } from '../results';
 import { $, show, escapeHtml, onClickAll, dataNum } from '../ui';
 
+/** This screen's own state. Board progress (used clues, the Daily Double,
+ *  Final done) lives in the night, so it is saved with it. */
 interface JeopardyState {
   lang: Lang;
-  used: Record<Lang, Record<string, boolean>>;
-  dd: Record<Lang, string | null>;
-  finalDone: Record<Lang, boolean>;
   currentCell: string | null;
   wager: number;
-  wagerTeam: number;
-  finalWagers: number[];
-  finalVerdicts: (boolean | null)[];
+  /** The team playing the Daily Double. */
+  wagerTeam: EntityId;
+  /** Final Jeopardy wagers and verdicts, by entity id. */
+  finalWagers: Record<EntityId, number>;
+  finalVerdicts: Record<EntityId, boolean | null>;
 }
 
 const jeop: JeopardyState = {
   lang: 'en',
-  used: { en: {}, ar: {} },
-  dd: { en: null, ar: null },
-  finalDone: { en: false, ar: false },
   currentCell: null,
   wager: 0,
   wagerTeam: 0,
-  finalWagers: [],
-  finalVerdicts: [],
+  finalWagers: {},
+  finalVerdicts: {},
 };
 
 const LANGS: Lang[] = ['en', 'ar'];
+
+/** Add (or subtract) points to a team's game score, and redraw. */
+function give(id: EntityId, pts: number): void {
+  award(night, id, pts);
+  renderScoreboard();
+}
+
+/** A team's game score on this board so far. */
+function scoreOf(id: EntityId): number {
+  return gameScoreOf(night, id);
+}
+
+function nameOf(id: EntityId): string {
+  return entitiesOf(night).find((e) => e.id === id)?.name ?? '';
+}
 
 function activeBoard(): Board {
   return BOARDS[jeop.lang];
@@ -51,12 +79,17 @@ function pickDailyDouble(lang: Lang): void {
   const cats = BOARDS[lang].cats;
   const ci = Math.floor(Math.random() * cats.length);
   const qi = 1 + Math.floor(Math.random() * (cats[ci].qs.length - 1));
-  jeop.dd[lang] = `${ci}-${qi}`;
+  hideDailyDouble(night, lang, `${ci}-${qi}`);
 }
 
-function boardProgress(lang: Lang): string {
+/** The active board's progress tonight. */
+function progress() {
+  return boardProgress(night, jeop.lang);
+}
+
+function progressText(lang: Lang): string {
   const total = BOARDS[lang].cats.reduce((n, c) => n + c.qs.length, 0);
-  return `${Object.keys(jeop.used[lang]).length}/${total}`;
+  return `${boardProgress(night, lang).used.length}/${total}`;
 }
 
 function cellData(key: string): { cat: Category; q: Question } {
@@ -75,23 +108,27 @@ export function renderPicker(): void {
     '<div class="lang-grid">' +
     LANGS.map((L) => {
       const b = BOARDS[L];
-      const started = Object.keys(jeop.used[L]).length;
+      const played = boardStatus(night, L) === 'played';
       return (
-        `<button class="lang-card" data-lang="${L}">` +
+        `<button class="lang-card" data-lang="${L}"${played ? ' disabled' : ''}>` +
         `<span class="big${b.rtl ? ' ar' : ''}">${b.label}</span>` +
         `<span class="meta${b.rtl ? ' ar' : ''}">${b.sub}</span>` +
-        `<span class="done">${started ? `${boardProgress(L)} used` : 'fresh board'}</span>` +
+        `<span class="done">${played ? 'Played tonight' : 'fresh board'}</span>` +
         '</button>'
       );
     }).join('') +
     '</div>' +
-    '<p class="sub">Each board has its own questions, its own hidden Daily Double, and its own ' +
-    'Final Jeopardy &mdash; so you can play one now and the other later. Points from both go to ' +
-    'the same scoreboard.</p>';
+    '<p class="sub">Each board is its own game, with its own questions, its own hidden Daily ' +
+    'Double and its own Final Jeopardy &mdash; so you can play one now and the other later. A ' +
+    'board can be played once a night.</p>';
 
-  onClickAll(card, '.lang-card', (btn) => {
-    jeop.lang = btn.getAttribute('data-lang') as Lang;
-    if (!jeop.dd[jeop.lang]) pickDailyDouble(jeop.lang);
+  onClickAll(card, '.lang-card:not(:disabled)', (btn) => {
+    const lang = btn.getAttribute('data-lang') as Lang;
+    // Starting the board's game gives it fresh progress.
+    if (!startGame(night, 'jeopardy', lang)) return;
+    jeop.lang = lang;
+    pickDailyDouble(lang);
+    saveNight();
     show('screen-board');
     renderBoard();
   });
@@ -110,7 +147,7 @@ export function renderBoard(): void {
   title.className = b.rtl ? 'ar' : '';
   title.style.fontSize = '1.8rem';
   $('boardEyebrow').textContent = b.rtl ? 'جيوباردي · اللوحة العربية' : 'Jeopardy · English board';
-  $('boardProgress').textContent = `${boardProgress(jeop.lang)} used`;
+  $('boardProgress').textContent = `${progressText(jeop.lang)} used`;
 
   let html = cats
     .map((cat) => `<div class="cat-head${b.rtl ? ' ar' : ''}">${escapeHtml(cat.name)}</div>`)
@@ -121,7 +158,7 @@ export function renderBoard(): void {
     cats.forEach((cat, ci) => {
       const q = cat.qs[r];
       const key = `${ci}-${r}`;
-      const used = jeop.used[jeop.lang][key];
+      const used = progress().used.includes(key);
       html +=
         `<button class="cell" data-key="${key}" data-hard="${q.v >= 400 ? 1 : 0}" ` +
         `${used ? 'disabled' : ''}>${used ? '&mdash;' : q.v}</button>`;
@@ -130,9 +167,9 @@ export function renderBoard(): void {
   board.innerHTML = html;
   onClickAll(board, '.cell:not(:disabled)', (btn) => openQuestion(btn.getAttribute('data-key')!));
 
-  const allUsed = Object.keys(jeop.used[jeop.lang]).length >= maxQ * cats.length;
+  const allUsed = progress().used.length >= maxQ * cats.length;
   const fb = $('finalBtn');
-  fb.hidden = jeop.finalDone[jeop.lang];
+  fb.hidden = progress().finalDone;
   fb.textContent = b.rtl ? 'السؤال الأخير' : 'Final Jeopardy';
   fb.className = allUsed ? 'btn' : 'btn ghost';
 }
@@ -140,7 +177,7 @@ export function renderBoard(): void {
 function openQuestion(key: string): void {
   jeop.currentCell = key;
   const d = cellData(key);
-  if (jeop.dd[jeop.lang] === key && !jeop.used[jeop.lang][key]) {
+  if (progress().dailyDouble === key && !progress().used.includes(key)) {
     renderDailyDouble(d);
     return;
   }
@@ -171,7 +208,7 @@ function showQuestion(d: { cat: Category; q: Question }, pts: number): void {
   const note = $('ddNote');
   note.hidden = !jeop.wager;
   if (jeop.wager) {
-    const who = entities()[jeop.wagerTeam]?.name ?? '';
+    const who = nameOf(jeop.wagerTeam); // set as textContent, so not escaped
     note.textContent = b.rtl
       ? `مراهنة مزدوجة: ${who} راهن بـ ${jeop.wager} نقطة.`
       : `Daily Double: ${who} wagered ${jeop.wager}.`;
@@ -184,7 +221,7 @@ function showQuestion(d: { cat: Category; q: Question }, pts: number): void {
 
 function renderDailyDouble(d: { cat: Category; q: Question }): void {
   const b = activeBoard();
-  const ents = entities();
+  const ents = entitiesOf(night);
   const card = $('ddCard');
   const arCls = b.rtl ? ' ar' : '';
 
@@ -202,26 +239,26 @@ function renderDailyDouble(d: { cat: Category; q: Question }): void {
     }</p>` +
     '<div class="wager-grid">' +
     ents
-      .map((e, i) => {
-        const cap = Math.max(d.q.v, state.scores[i] || 0);
+      .map((e) => {
+        const cap = Math.max(d.q.v, scoreOf(e.id));
         return (
           `<div class="wager-row"><span class="who"><span class="sw" style="background:${e.color}"></span>` +
           `${escapeHtml(e.name)}</span>` +
           `<span class="cap">${b.rtl ? 'الحد الأقصى' : 'max'} ${cap}</span>` +
-          `<input type="number" id="ddW${i}" min="${d.q.v}" max="${cap}" value="${d.q.v}" step="50">` +
-          `<button class="btn" data-i="${i}" style="padding:10px 14px;font-size:0.85rem;">` +
+          `<input type="number" id="ddW${e.id}" min="${d.q.v}" max="${cap}" value="${d.q.v}" step="50">` +
+          `<button class="btn" data-id="${e.id}" style="padding:10px 14px;font-size:0.85rem;">` +
           `${b.rtl ? 'هذا فريقنا' : 'This is our team'}</button></div>`
         );
       })
       .join('') +
     '</div>';
 
-  onClickAll(card, 'button[data-i]', (btn) => {
-    const i = dataNum(btn, 'i');
-    const inp = $(`ddW${i}`) as HTMLInputElement;
-    const cap = Math.max(d.q.v, state.scores[i] || 0);
+  onClickAll(card, 'button[data-id]', (btn) => {
+    const id = dataNum(btn, 'id');
+    const inp = $(`ddW${id}`) as HTMLInputElement;
+    const cap = Math.max(d.q.v, scoreOf(id));
     jeop.wager = Math.min(cap, Math.max(d.q.v, parseInt(inp.value, 10) || d.q.v));
-    jeop.wagerTeam = i;
+    jeop.wagerTeam = id;
     showQuestion(d, jeop.wager);
   });
 
@@ -237,34 +274,35 @@ function buildAwardRow(): void {
   const pts = jeop.wager || d.q.v;
 
   if (jeop.wager) {
-    const e = entities()[jeop.wagerTeam] ?? { name: '', color: 'var(--accent)' };
+    const e = entitiesOf(night).find((x) => x.id === jeop.wagerTeam) ?? { color: 'var(--accent)' };
     row.innerHTML =
       `<button class="award-btn" data-dd="right"><span class="sw" style="background:${e.color}"></span>` +
       `${b.rtl ? `صحيح +${pts}` : `Correct +${pts}`}</button>` +
       '<button class="award-btn" data-dd="wrong"><span class="sw" style="background:var(--alert)"></span>' +
       `${b.rtl ? `خطأ −${pts}` : `Wrong −${pts}`}</button>`;
     onClickAll(row, '.award-btn', (btn) => {
-      award(jeop.wagerTeam, btn.getAttribute('data-dd') === 'right' ? pts : -pts);
+      give(jeop.wagerTeam, btn.getAttribute('data-dd') === 'right' ? pts : -pts);
       finishCell();
     });
     return;
   }
 
-  row.innerHTML = entities()
+  row.innerHTML = entitiesOf(night)
     .map(
-      (e, i) =>
-        `<button class="award-btn" data-i="${i}"><span class="sw" style="background:${e.color}"></span>` +
+      (e) =>
+        `<button class="award-btn" data-id="${e.id}"><span class="sw" style="background:${e.color}"></span>` +
         `+${pts} ${escapeHtml(e.name)}</button>`,
     )
     .join('');
   onClickAll(row, '.award-btn', (btn) => {
-    award(dataNum(btn, 'i'), pts);
+    give(dataNum(btn, 'id'), pts);
     finishCell();
   });
 }
 
 function finishCell(): void {
-  if (jeop.currentCell) jeop.used[jeop.lang][jeop.currentCell] = true;
+  if (jeop.currentCell) useClue(night, jeop.lang, jeop.currentCell);
+  saveNight();
   jeop.wager = 0;
   show('screen-board');
   renderBoard();
@@ -272,16 +310,25 @@ function finishCell(): void {
 
 /* ---------------- final jeopardy ---------------- */
 
-type FinalStep = 'wager' | 'question' | 'verdict' | 'standings';
+type FinalStep = 'wager' | 'question' | 'verdict' | 'settled';
+
+/** Final Jeopardy's 60-second clock. */
+let finalTimer = 0;
+
+export function stopJeopardyTimer(): void {
+  clearInterval(finalTimer);
+}
 
 export function renderFinal(step: FinalStep): void {
   const b = activeBoard();
-  const ents = entities();
+  const ents = entitiesOf(night);
   const card = $('finalCard');
   const arCls = b.rtl ? ' ar' : '';
 
   if (step === 'wager') {
-    jeop.finalWagers = ents.map((_, i) => Math.max(0, Math.floor((state.scores[i] || 0) / 2)));
+    jeop.finalWagers = Object.fromEntries(
+      ents.map((e) => [e.id, Math.max(0, Math.floor(scoreOf(e.id) / 2))]),
+    );
     card.innerHTML =
       `<p class="kicker">${b.rtl ? 'السؤال الأخير' : 'Final Jeopardy'}</p>` +
       `<h2 class="${b.rtl ? 'ar' : ''}">${escapeHtml(b.finalCat)}</h2>` +
@@ -292,13 +339,13 @@ export function renderFinal(step: FinalStep): void {
       }</div>` +
       '<div class="wager-grid">' +
       ents
-        .map((e, i) => {
-          const cap = Math.max(0, state.scores[i] || 0);
+        .map((e) => {
+          const cap = Math.max(0, scoreOf(e.id));
           return (
             `<div class="wager-row"><span class="who"><span class="sw" style="background:${e.color}"></span>` +
             `${escapeHtml(e.name)}</span>` +
             `<span class="cap">${b.rtl ? 'الرصيد' : 'score'} ${cap}</span>` +
-            `<input type="number" id="fW${i}" min="0" max="${cap}" value="${jeop.finalWagers[i]}" step="50"></div>`
+            `<input type="number" id="fW${e.id}" min="0" max="${cap}" value="${jeop.finalWagers[e.id]}" step="50"></div>`
           );
         })
         .join('') +
@@ -308,10 +355,10 @@ export function renderFinal(step: FinalStep): void {
       }</button>`;
 
     $('fLock').addEventListener('click', () => {
-      ents.forEach((_, i) => {
-        const cap = Math.max(0, state.scores[i] || 0);
-        const v = parseInt(($(`fW${i}`) as HTMLInputElement).value, 10) || 0;
-        jeop.finalWagers[i] = Math.min(cap, Math.max(0, v));
+      ents.forEach((e) => {
+        const cap = Math.max(0, scoreOf(e.id));
+        const v = parseInt(($(`fW${e.id}`) as HTMLInputElement).value, 10) || 0;
+        jeop.finalWagers[e.id] = Math.min(cap, Math.max(0, v));
       });
       renderFinal('question');
     });
@@ -332,27 +379,28 @@ export function renderFinal(step: FinalStep): void {
       }</p>` +
       `<button class="btn ghost" id="fReveal">${b.rtl ? 'اكشف الإجابة' : 'Reveal the answer'}</button>`;
 
-    const t = window.setInterval(() => {
+    stopJeopardyTimer();
+    finalTimer = window.setInterval(() => {
       secs--;
       const el = document.getElementById('fTimer');
       if (!el) {
-        clearInterval(t);
+        stopJeopardyTimer();
         return;
       }
       el.textContent = String(secs);
       el.classList.toggle('low', secs <= 10);
-      if (secs <= 0) clearInterval(t);
+      if (secs <= 0) stopJeopardyTimer();
     }, 1000);
 
     $('fReveal').addEventListener('click', () => {
-      clearInterval(t);
+      stopJeopardyTimer();
       renderFinal('verdict');
     });
     return;
   }
 
   if (step === 'verdict') {
-    jeop.finalVerdicts = ents.map(() => null);
+    jeop.finalVerdicts = Object.fromEntries(ents.map((e) => [e.id, null]));
     card.innerHTML =
       `<p class="kicker">${b.rtl ? 'الإجابة' : 'The answer'}</p>` +
       `<p class="huge${arCls}" style="color:var(--good);font-size:clamp(1.2rem,2.8vw,1.7rem);max-width:40ch;">` +
@@ -360,67 +408,85 @@ export function renderFinal(step: FinalStep): void {
       '<div class="wager-grid">' +
       ents
         .map(
-          (e, i) =>
+          (e) =>
             `<div class="wager-row"><span class="who"><span class="sw" style="background:${e.color}"></span>` +
             `${escapeHtml(e.name)}</span>` +
-            `<span class="cap">${b.rtl ? 'راهن بـ' : 'wagered'} ${jeop.finalWagers[i]}</span>` +
-            `<div class="verdict-row"><button class="yes" data-i="${i}" data-v="1">${
+            `<span class="cap">${b.rtl ? 'راهن بـ' : 'wagered'} ${jeop.finalWagers[e.id]}</span>` +
+            `<div class="verdict-row"><button class="yes" data-id="${e.id}" data-v="1">${
               b.rtl ? 'صحيح' : 'Right'
             }</button>` +
-            `<button class="no" data-i="${i}" data-v="0">${b.rtl ? 'خطأ' : 'Wrong'}</button></div></div>`,
+            `<button class="no" data-id="${e.id}" data-v="0">${b.rtl ? 'خطأ' : 'Wrong'}</button></div></div>`,
         )
         .join('') +
       '</div>' +
       `<button class="btn" id="fApply">${b.rtl ? 'احسب النتيجة النهائية' : 'Settle the scores'}</button>`;
 
     onClickAll(card, '.verdict-row button', (btn) => {
-      jeop.finalVerdicts[dataNum(btn, 'i')] = btn.getAttribute('data-v') === '1';
+      jeop.finalVerdicts[dataNum(btn, 'id')] = btn.getAttribute('data-v') === '1';
       const row = btn.parentElement!;
       row.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
       btn.classList.add('on');
     });
 
     $('fApply').addEventListener('click', () => {
-      ents.forEach((_, i) => {
-        if (jeop.finalVerdicts[i] === true) award(i, jeop.finalWagers[i]);
-        else if (jeop.finalVerdicts[i] === false) award(i, -jeop.finalWagers[i]);
+      ents.forEach((e) => {
+        if (jeop.finalVerdicts[e.id] === true) give(e.id, jeop.finalWagers[e.id]);
+        else if (jeop.finalVerdicts[e.id] === false) give(e.id, -jeop.finalWagers[e.id]);
       });
-      jeop.finalDone[jeop.lang] = true;
-      renderFinal('standings');
+      settleFinal(night, jeop.lang);
+      saveNight();
+      renderFinal('settled');
     });
     return;
   }
 
-  // standings
-  const rows = entities()
-    .map((e, i) => ({ name: e.name, color: e.color, score: state.scores[i] || 0 }))
-    .sort((a, c) => c.score - a.score);
-
+  // settled: the natural finish. One button, no confirm, into the results.
   card.innerHTML =
-    `<p class="kicker">${b.rtl ? 'النتيجة النهائية' : 'Final standings'}</p>` +
-    `<h2 class="${b.rtl ? 'ar' : ''}">${escapeHtml(rows[0].name)}${
-      b.rtl ? ' في الصدارة' : ' takes it'
+    `<p class="kicker">${b.rtl ? 'السؤال الأخير' : 'Final Jeopardy'}</p>` +
+    `<h2 class="${b.rtl ? 'ar' : ''}">${
+      b.rtl ? 'انتهى السؤال الأخير.' : 'Final Jeopardy is settled.'
     }</h2>` +
-    '<div class="standings">' +
-    rows
-      .map(
-        (r, i) =>
-          `<div class="standing${i === 0 ? ' lead' : ''}"><span class="pos mono">${i + 1}</span>` +
-          `<span class="sw" style="width:16px;height:16px;border-radius:50%;background:${r.color}"></span>` +
-          `<span class="nm">${escapeHtml(r.name)}</span><span class="pts mono">${r.score}</span></div>`,
-      )
-      .join('') +
-    '</div>' +
-    `<div class="btn-row"><button class="btn ghost" id="fToPicker">${
-      b.rtl ? 'اللوحة الأخرى' : 'Play the other board'
-    }</button>` +
-    `<button class="btn ghost" id="fHome2">${b.rtl ? 'القائمة الرئيسية' : 'Home'}</button></div>`;
+    `<button class="btn${arCls}" id="fEnd">${b.rtl ? 'أنهِ اللعبة' : 'End game'}</button>`;
+  $('fEnd').addEventListener('click', endGameNow);
+  show('screen-final');
+}
 
-  $('fToPicker').addEventListener('click', () => {
-    show('screen-jpicker');
-    renderPicker();
-  });
-  $('fHome2').addEventListener('click', () => show('screen-home'));
+/* ---------------- game in progress ---------------- */
+
+/** Into Jeopardy with no board in progress: pick a board, which starts its
+ *  game. */
+export function startJeopardy(): void {
+  jeop.wager = 0;
+  jeop.currentCell = null;
+  show('screen-jpicker');
+  renderPicker();
+}
+
+/** Back into the board in progress, skipping the picker. An open clue, a
+ *  placed Daily Double wager or a Final Jeopardy under way is dropped, so
+ *  nothing secret is shown again and no wager stands half-played; the clue
+ *  stays unused and Final Jeopardy can be started again. A settled Final
+ *  returns to its End game prompt. */
+export function resumeJeopardy(): void {
+  const board = gameInProgress(night)?.board;
+  if (!board) {
+    startJeopardy();
+    return;
+  }
+  jeop.lang = board;
+  jeop.wager = 0;
+  jeop.currentCell = null;
+  if (boardProgress(night, board).finalDone) {
+    renderFinal('settled');
+    return;
+  }
+  show('screen-board');
+  renderBoard();
+}
+
+/** Both boards have been played tonight, so there's no Jeopardy left. */
+export function bothBoardsPlayed(): boolean {
+  return LANGS.every((L) => boardStatus(night, L) === 'played');
 }
 
 /* ---------------- wiring ---------------- */
@@ -435,7 +501,7 @@ export function initJeopardy(): void {
   });
 
   $('skipAwardBtn').addEventListener('click', () => {
-    if (jeop.wager) award(jeop.wagerTeam, -jeop.wager);
+    if (jeop.wager) give(jeop.wagerTeam, -jeop.wager);
     finishCell();
   });
 
@@ -446,12 +512,11 @@ export function initJeopardy(): void {
   });
 
   $('boardDoneBtn').addEventListener('click', () => show('screen-home'));
-  $('boardSwitchBtn').addEventListener('click', () => {
-    show('screen-jpicker');
-    renderPicker();
-  });
   $('finalBtn').addEventListener('click', () => renderFinal('wager'));
-  $('finalHomeBtn').addEventListener('click', () => show('screen-home'));
+  $('finalHomeBtn').addEventListener('click', () => {
+    stopJeopardyTimer();
+    show('screen-home');
+  });
   $('ddHomeBtn').addEventListener('click', () => {
     jeop.wager = 0;
     show('screen-board');

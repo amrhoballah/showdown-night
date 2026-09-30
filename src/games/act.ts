@@ -6,7 +6,8 @@
  */
 
 import { ACT_WORDS } from '../data/act';
-import { entities, award } from '../scoreboard';
+import { night, renderScoreboard } from '../scoreboard';
+import { entitiesOf, award, confirmTurn, nextTurn, type EntityId } from '../night';
 import { $, show, escapeHtml, shuffle } from '../ui';
 
 const act = {
@@ -16,7 +17,8 @@ const act = {
   got: 0,
   seconds: 60,
   timer: 0 as number,
-  teamIdx: 0,
+  /** Who this turn is for, chosen before the clock starts. */
+  teamId: 0 as EntityId,
 };
 
 export function stopActTimer(): void {
@@ -27,7 +29,9 @@ export function renderAct(): void {
   const card = $('actCard');
 
   if (act.phase === 'ready') {
-    const ents = entities();
+    const ents = entitiesOf(night);
+    // Whoever has had the fewest turns plays next; the host can change it.
+    const next = nextTurn(night);
     card.innerHTML =
       '<p class="kicker">Act It Out</p>' +
       '<h2>One guesser, back to the screen.</h2>' +
@@ -38,14 +42,19 @@ export function renderAct(): void {
         ? '<p class="sub">Playing for:</p><select id="actTeam" style="background:var(--bg-raised-2);' +
           'color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 14px;' +
           'font-family:inherit;font-size:0.95rem;">' +
-          ents.map((e, i) => `<option value="${i}">${escapeHtml(e.name)}</option>`).join('') +
+          ents
+            .map(
+              (e) =>
+                `<option value="${e.id}"${e.id === next ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
+            )
+            .join('') +
           '</select>'
         : '') +
       '<button class="btn" id="actStart">Start the 60 seconds</button>';
 
     $('actStart').addEventListener('click', () => {
       const sel = document.getElementById('actTeam') as HTMLSelectElement | null;
-      act.teamIdx = sel ? Number(sel.value) : 0;
+      act.teamId = sel ? Number(sel.value) : 0;
       act.deck = shuffle(ACT_WORDS);
       act.idx = 0;
       act.got = 0;
@@ -94,7 +103,7 @@ export function renderAct(): void {
 
   // done
   clearInterval(act.timer);
-  const name = entities()[act.teamIdx]?.name ?? 'the team';
+  const name = entitiesOf(night).find((e) => e.id === act.teamId)?.name ?? 'the team';
   card.innerHTML =
     '<p class="kicker">Time&rsquo;s up</p>' +
     `<p class="score-burst">${act.got}</p>` +
@@ -103,8 +112,12 @@ export function renderAct(): void {
     '<div class="btn-row"><button class="btn" id="actAward">Add the points</button>' +
     '<button class="btn ghost" id="actAgain">Another turn</button></div>';
 
+  // Adding the points confirms the turn, even at 0. "Another turn" is a
+  // do-over: the round is discarded and no turn is counted.
   $('actAward').addEventListener('click', () => {
-    award(act.teamIdx, act.got);
+    award(night, act.teamId, act.got);
+    confirmTurn(night, act.teamId);
+    renderScoreboard();
     act.phase = 'ready';
     renderAct();
   });
@@ -120,6 +133,22 @@ function refreshWord(): void {
   const scoreEl = document.getElementById('actScore');
   if (wordEl) wordEl.textContent = act.deck[act.idx % act.deck.length];
   if (scoreEl) scoreEl.textContent = String(act.got);
+}
+
+/** A new Act It Out game, from the first "Start". */
+export function startAct(): void {
+  stopActTimer();
+  act.phase = 'ready';
+  renderAct();
+}
+
+/** Back into the game in progress. A running clock goes back to "Start", so
+ *  a turn can't carry on from where it was left; a finished turn waiting for
+ *  its points stays. */
+export function resumeAct(): void {
+  stopActTimer();
+  if (act.phase === 'play') act.phase = 'ready';
+  renderAct();
 }
 
 export function initAct(): void {

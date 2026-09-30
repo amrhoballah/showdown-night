@@ -13,8 +13,13 @@
 <div class="topbar">
   <div class="brand"><span class="dot"></span><strong style="font-family:'Unbounded',sans-serif;">SHOWDOWN NIGHT</strong></div>
   <div class="score-row" id="scoreRow"></div>
+  <button class="home-btn end-game-btn" id="endGameBtn" hidden>End game</button>
   <button class="home-btn" id="homeBtn">Home</button>
+  <div class="correct-panel" id="correctPanel" hidden></div>
 </div>
+
+<div class="confirm-backdrop" id="confirmBox" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <div class="wrap">
 
@@ -27,8 +32,12 @@
     </div>
 
     <div class="card" style="padding:24px; margin-top:10px;">
-      <h3 style="font-size:1.1rem;">How are you splitting up?</h3>
+      <div class="setup-head">
+        <h3 style="font-size:1.1rem;">How are you splitting up?</h3>
+        <button class="btn ghost new-night-btn" id="newNightBtn">New night</button>
+      </div>
       <div class="mode-grid" id="modeGrid"></div>
+      <p class="setup-note" id="setupNote" hidden></p>
 
       <div id="teamSetupArea" class="team-setup"></div>
 
@@ -40,6 +49,8 @@
           <button class="btn ghost" id="ffaAddBtn">Add</button>
         </div>
       </div>
+
+      <div class="left-area" id="leftArea" hidden></div>
     </div>
 
     <div class="game-launch">
@@ -54,6 +65,7 @@
         <h3>Outburst Rounds</h3>
         <p>A mystery category appears &mdash; from ice cream flavors to Cairo Uber drivers &mdash; the clock starts, and everyone shouts out as many matches as they can before time's up. The hidden list reveals after &mdash; tally what you actually said.</p>
         <button class="btn go ghost" id="launchOutburst">Start round 1</button>
+        <span class="teams-only" id="outburstTeamsOnly" hidden>Teams only</span>
       </div>
       <div class="launch-card" style="--glow:#ff6b6b;">
         <span class="tag">Game 3 &middot; 12 players &middot; ~40 min</span>
@@ -100,7 +112,6 @@
       <div class="btn-row">
         <span class="sub mono" id="boardProgress" style="margin:0; align-self:center; font-size:0.8rem;"></span>
         <button class="btn ghost" id="finalBtn">Final Jeopardy</button>
-        <button class="btn ghost" id="boardSwitchBtn">Switch board</button>
         <button class="btn ghost" id="boardDoneBtn">Home</button>
       </div>
     </div>
@@ -181,6 +192,16 @@
       <button class="btn ghost" id="waveHomeBtn">&larr; Back to home</button>
       <span class="sub" id="waveProgress" style="margin:0;"></span>
     </div>
+  </section>
+
+  <!-- ===================== CONTINUE TONIGHT (on load) ===================== -->
+  <section id="screen-continue" class="result-screen" hidden>
+    <div class="result-card" id="continueCard"></div>
+  </section>
+
+  <!-- ===================== END OF GAME RESULTS ===================== -->
+  <section id="screen-result" class="result-screen" hidden>
+    <div class="result-card" id="resultCard"></div>
   </section>
 
 </div>

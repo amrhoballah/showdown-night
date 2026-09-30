@@ -8,7 +8,8 @@
 
 import type { Spectrum } from '../types';
 import { SPECTRA } from '../data/spectra';
-import { entities, award } from '../scoreboard';
+import { night, renderScoreboard } from '../scoreboard';
+import { entitiesOf, award, confirmTurn, nextTurn, type EntityId } from '../night';
 import { $, show, escapeHtml, shuffle, onClickAll, dataNum } from '../ui';
 
 const wave = {
@@ -17,7 +18,8 @@ const wave = {
   phase: 'handoff' as 'handoff' | 'target' | 'guess' | 'result',
   target: 5,
   guess: 0,
-  teamIdx: 0,
+  /** The guessing team for this round, chosen at the hand-off. */
+  teamId: 0 as EntityId,
 };
 
 /** Centre of slot n on a 10-slot bar, as a percentage. */
@@ -44,10 +46,12 @@ export function renderWave(): void {
   }
   const sp = wave.deck[wave.idx];
   const card = $('waveCard');
-  const ents = entities();
+  const ents = entitiesOf(night);
   $('waveProgress').textContent = `Round ${wave.idx + 1}`;
 
   if (wave.phase === 'handoff') {
+    // Whoever has had the fewest turns guesses next; the host can change it.
+    wave.teamId = nextTurn(night) ?? ents[0]?.id ?? 0;
     card.innerHTML =
       `<p class="kicker">Wavelength &middot; round ${wave.idx + 1}</p>` +
       '<h2>Pick a clue-giver and pass them the laptop.</h2>' +
@@ -63,8 +67,8 @@ export function renderWave(): void {
           'font-family:inherit;font-size:0.95rem;">' +
           ents
             .map(
-              (e, i) =>
-                `<option value="${i}"${i === wave.teamIdx ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
+              (e) =>
+                `<option value="${e.id}"${e.id === wave.teamId ? ' selected' : ''}>${escapeHtml(e.name)}</option>`,
             )
             .join('') +
           '</select>'
@@ -73,7 +77,7 @@ export function renderWave(): void {
 
     $('waveShowTarget').addEventListener('click', () => {
       const sel = document.getElementById('waveTeam') as HTMLSelectElement | null;
-      if (sel) wave.teamIdx = Number(sel.value);
+      if (sel) wave.teamId = Number(sel.value);
       wave.target = 1 + Math.floor(Math.random() * 10);
       wave.phase = 'target';
       renderWave();
@@ -100,7 +104,7 @@ export function renderWave(): void {
   }
 
   if (wave.phase === 'guess') {
-    const name = ents[wave.teamIdx]?.name ?? 'the team';
+    const name = ents.find((e) => e.id === wave.teamId)?.name ?? 'the team';
     card.innerHTML =
       `<p class="kicker">Round ${wave.idx + 1} &middot; ${escapeHtml(name)} guessing</p>` +
       '<h2>What number is that clue?</h2>' +
@@ -125,7 +129,7 @@ export function renderWave(): void {
   const pts = dist === 0 ? 4 : dist === 1 ? 2 : dist === 2 ? 1 : 0;
   const verdict =
     pts === 4 ? 'Exactly it.' : pts === 2 ? 'One off.' : pts === 1 ? 'Two off.' : 'Nowhere near.';
-  const name = ents[wave.teamIdx]?.name ?? 'the team';
+  const name = ents.find((e) => e.id === wave.teamId)?.name ?? 'the team';
 
   card.innerHTML =
     '<p class="kicker">Reveal</p>' +
@@ -145,13 +149,31 @@ export function renderWave(): void {
       pts ? `Add ${pts} to ${escapeHtml(name)}` : 'Next round'
     }</button></div>`;
 
+  // Confirming the result is the turn, even at 0 points.
   $('waveAward').addEventListener('click', () => {
-    if (pts) award(wave.teamIdx, pts);
+    if (pts) award(night, wave.teamId, pts);
+    confirmTurn(night, wave.teamId);
+    renderScoreboard();
     wave.idx++;
-    wave.teamIdx = (wave.teamIdx + 1) % Math.max(1, entities().length);
     wave.phase = 'handoff';
     renderWave();
   });
+}
+
+/** A new Wavelength game: a fresh deck from round 1. */
+export function startWave(): void {
+  wave.deck = shuffle(SPECTRA) as Spectrum[];
+  wave.idx = 0;
+  wave.phase = 'handoff';
+  renderWave();
+}
+
+/** Back into the game in progress. A revealed target or a guess in progress
+ *  goes back to the hand-off, so the number is never shown to the room; the
+ *  clue-giver gets a new one. A result waiting to be confirmed stays. */
+export function resumeWave(): void {
+  if (wave.phase === 'target' || wave.phase === 'guess') wave.phase = 'handoff';
+  renderWave();
 }
 
 export function initWave(): void {
