@@ -154,7 +154,6 @@ export function resumeAct(): void {
 export function initAct(): void {
   $('actHomeBtn').addEventListener('click', () => {
     stopActTimer();
-    act.phase = 'ready';
     show('screen-home');
   });
 }
