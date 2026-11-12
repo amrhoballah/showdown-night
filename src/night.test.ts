@@ -27,6 +27,9 @@ import {
   hideDailyDouble,
   useClue,
   settleFinal,
+  lockDailyDouble,
+  lockFinalWagers,
+  pendingWager,
   setupLocked,
   addTeam,
   removePlayer as remove,
@@ -247,8 +250,8 @@ describe('Jeopardy board progress', () => {
     useClue(n, 'ar', '0-0');
     useClue(n, 'ar', '1-4');
     settleFinal(n, 'ar');
-    expect(boardProgress(n, 'ar')).toEqual({ used: ['0-0', '1-4'], dailyDouble: '3-2', finalDone: true });
-    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false });
+    expect(boardProgress(n, 'ar')).toEqual({ used: ['0-0', '1-4'], dailyDouble: '3-2', finalDone: true, pending: null });
+    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false, pending: null });
   });
 
   it('starts fresh whenever a board starts a game', () => {
@@ -257,7 +260,45 @@ describe('Jeopardy board progress', () => {
     boardProgress(n, 'en').used.push('0-0');
     hideDailyDouble(n, 'en', '1-1');
     startGame(n, 'jeopardy', 'en');
-    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false });
+    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false, pending: null });
+  });
+});
+
+describe('locked Jeopardy wagers', () => {
+  function board(): Night {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'en');
+    return n;
+  }
+
+  it('keep a Daily Double through a reload until its clue is used', () => {
+    const n = board();
+    const id = entitiesOf(n)[0].id;
+    hideDailyDouble(n, 'en', '2-3');
+    lockDailyDouble(n, 'en', '2-3', id, 600);
+    const back = deserialize(serialize(n));
+    expect(pendingWager(back, 'en')).toEqual({ kind: 'dd', key: '2-3', team: id, amount: 600 });
+    useClue(back, 'en', '0-0');
+    expect(pendingWager(back, 'en')).not.toBeNull();
+    useClue(back, 'en', '2-3');
+    expect(pendingWager(back, 'en')).toBeNull();
+  });
+
+  it('keep Final wagers through a reload until Final is settled', () => {
+    const n = board();
+    const [a, b] = entitiesOf(n).map((e) => e.id);
+    lockFinalWagers(n, 'en', { [a]: 300, [b]: 0 });
+    const back = deserialize(serialize(n));
+    expect(pendingWager(back, 'en')).toEqual({ kind: 'final', wagers: { [a]: 300, [b]: 0 } });
+    settleFinal(back, 'en');
+    expect(pendingWager(back, 'en')).toBeNull();
+  });
+
+  it('belong to one board only', () => {
+    const n = board();
+    lockDailyDouble(n, 'en', '1-1', entitiesOf(n)[0].id, 200);
+    expect(pendingWager(n, 'ar')).toBeNull();
   });
 });
 
@@ -313,6 +354,17 @@ describe('the saved night', () => {
     expect(addPlayer(back, 'Omar')!.id).toBeGreaterThan(Math.max(...back.players.slice(0, 3).map((p) => p.id)));
   });
 
+  it('reads a version 1 save, with no locked wagers', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'en');
+    useClue(n, 'en', '0-0');
+    const v1 = JSON.parse(JSON.stringify(n));
+    delete v1.boards.en.pending;
+    delete v1.boards.ar.pending;
+    expect(deserialize(JSON.stringify({ version: 1, night: v1 }))).toEqual(n);
+  });
+
   it.each([
     ['nothing saved', null],
     ['empty text', ''],
@@ -321,6 +373,7 @@ describe('the saved night', () => {
     ['no version', JSON.stringify(newNight())],
     ['the wrong shape', JSON.stringify({ version: 1, night: { mode: 'teams' } })],
     ['a bad game type', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'mafia', entityIds: [], scores: {} }] } })],
+    ['a malformed locked wager', JSON.stringify({ version: 2, night: { ...newNight(), boards: { en: { used: [], dailyDouble: null, finalDone: false, pending: { kind: 'dd', key: '0-1' } }, ar: newNight().boards.ar } } })],
     ['a non-whole score', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'emoji', entityIds: [1], scores: { 1: 1.5 } }] } })],
   ])('falls back to a fresh night for %s', (_, data) => {
     expect(deserialize(data)).toEqual(newNight());

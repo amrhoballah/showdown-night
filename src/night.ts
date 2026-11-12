@@ -83,7 +83,14 @@ export interface BoardProgress {
   /** Where its Daily Double hides, once the board has been picked. */
   dailyDouble: string | null;
   finalDone: boolean;
+  /** A wager locked once its clue was shown, so leaving or reloading can't
+   *  undo it: a Daily Double, or every team's Final Jeopardy wager. */
+  pending: PendingWager | null;
 }
+
+export type PendingWager =
+  | { kind: 'dd'; key: string; team: EntityId; amount: number }
+  | { kind: 'final'; wagers: Record<EntityId, number> };
 
 export interface Night {
   mode: Mode;
@@ -134,7 +141,7 @@ export function newNight(): Night {
 }
 
 function freshBoard(): BoardProgress {
-  return { used: [], dailyDouble: null, finalDone: false };
+  return { used: [], dailyDouble: null, finalDone: false, pending: null };
 }
 
 function create(night: Night, name: string, slot: number): NightEntity {
@@ -282,12 +289,30 @@ export function hideDailyDouble(night: Night, board: Board, key: string): void {
   night.boards[board].dailyDouble = key;
 }
 
+/** Lock a Daily Double wager as its clue is shown. It stays until the clue
+ *  is used, through Home, resume and reload. */
+export function lockDailyDouble(night: Night, board: Board, key: string, team: EntityId, amount: number): void {
+  night.boards[board].pending = { kind: 'dd', key, team, amount };
+}
+
+/** Lock every team's Final Jeopardy wager as the question is shown. */
+export function lockFinalWagers(night: Night, board: Board, wagers: Record<EntityId, number>): void {
+  night.boards[board].pending = { kind: 'final', wagers: { ...wagers } };
+}
+
+export function pendingWager(night: Night, board: Board): PendingWager | null {
+  return night.boards[board].pending;
+}
+
 export function useClue(night: Night, board: Board, key: string): void {
+  const p = night.boards[board];
+  if (p.pending?.kind === 'dd' && p.pending.key === key) p.pending = null;
   if (!night.boards[board].used.includes(key)) night.boards[board].used.push(key);
 }
 
 export function settleFinal(night: Night, board: Board): void {
   night.boards[board].finalDone = true;
+  if (night.boards[board].pending?.kind === 'final') night.boards[board].pending = null;
 }
 
 /** A Jeopardy board tonight: not yet played, its game in progress, or played
@@ -495,7 +520,7 @@ export function standings(night: Night): Standing[] {
 // ---------- the saved night ----------
 
 /** Bump when the saved shape changes; an older saved night is then discarded. */
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
 
 /** The whole night as text, for localStorage. Standings aren't included:
  *  they are always derived from the game scores. */
@@ -509,6 +534,11 @@ export function serialize(night: Night): string {
 export function deserialize(data: string | null): Night {
   try {
     const parsed = JSON.parse(data ?? '');
+    if (parsed?.version === 1 && isObj(parsed.night) && isObj(parsed.night.boards)) {
+      // Version 1 had no locked wagers.
+      for (const b of Object.values(parsed.night.boards)) if (isObj(b)) b.pending = null;
+      if (isNight(parsed.night)) return parsed.night;
+    }
     if (parsed?.version === FORMAT_VERSION && isNight(parsed.night)) return parsed.night;
   } catch {
     // fall through
@@ -547,8 +577,16 @@ function isBoardProgress(x: unknown): boolean {
     Array.isArray(x.used) &&
     x.used.every((k) => typeof k === 'string') &&
     (x.dailyDouble === null || typeof x.dailyDouble === 'string') &&
-    typeof x.finalDone === 'boolean'
+    typeof x.finalDone === 'boolean' &&
+    isPending(x.pending)
   );
+}
+
+function isPending(x: unknown): boolean {
+  if (x === null) return true;
+  if (!isObj(x)) return false;
+  if (x.kind === 'dd') return typeof x.key === 'string' && isInt(x.team) && isInt(x.amount);
+  return x.kind === 'final' && isScores(x.wagers);
 }
 
 function isNight(x: unknown): x is Night {
