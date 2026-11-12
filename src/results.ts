@@ -48,6 +48,14 @@ function stopResultTimers(): void {
   document.getElementById('confetti')?.remove();
 }
 
+/** Leave the result screens by any route: stop their timers and forget the
+ *  result and any chained game start (Home cancels it on purpose). */
+export function leaveResults(): void {
+  stopResultTimers();
+  result = null;
+  afterResults = null;
+}
+
 let endGameHandler: () => void = () => {};
 
 /** Set what ending the game in progress does (stop timers, end it, show
@@ -81,10 +89,8 @@ function next(): void {
     renderResult();
     return;
   }
-  stopResultTimers();
-  result = null;
   const then = afterResults;
-  afterResults = null;
+  leaveResults();
   if (then) then();
   else show('screen-home');
 }
