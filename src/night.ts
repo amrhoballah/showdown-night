@@ -304,6 +304,12 @@ export function pendingWager(night: Night, board: Board): PendingWager | null {
   return night.boards[board].pending;
 }
 
+/** Drop a locked wager without settling it. Only for a lock that can't be
+ *  played, such as one read back from a damaged save. */
+export function dropPendingWager(night: Night, board: Board): void {
+  night.boards[board].pending = null;
+}
+
 export function useClue(night: Night, board: Board, key: string): void {
   const p = night.boards[board];
   if (p.pending?.kind === 'dd' && p.pending.key === key) p.pending = null;

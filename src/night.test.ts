@@ -30,6 +30,7 @@ import {
   lockDailyDouble,
   lockFinalWagers,
   pendingWager,
+  dropPendingWager,
   setupLocked,
   addTeam,
   removePlayer as remove,
@@ -293,6 +294,14 @@ describe('locked Jeopardy wagers', () => {
     expect(pendingWager(back, 'en')).toEqual({ kind: 'final', wagers: { [a]: 300, [b]: 0 } });
     settleFinal(back, 'en');
     expect(pendingWager(back, 'en')).toBeNull();
+  });
+
+  it('can be dropped without settling, leaving the clue unused', () => {
+    const n = board();
+    lockDailyDouble(n, 'en', '999-1', entitiesOf(n)[0].id, 200);
+    dropPendingWager(n, 'en');
+    expect(pendingWager(n, 'en')).toBeNull();
+    expect(boardProgress(n, 'en').used).toEqual([]);
   });
 
   it('belong to one board only', () => {

@@ -30,6 +30,7 @@ import {
   lockDailyDouble,
   lockFinalWagers,
   pendingWager,
+  dropPendingWager,
 } from '../night';
 import { endGameNow } from '../results';
 import { $, show, escapeHtml, onClickAll, dataNum } from '../ui';
@@ -99,6 +100,11 @@ function cellData(key: string): { cat: Category; q: Question } {
   const [ci, qi] = key.split('-').map(Number);
   const cat = activeBoard().cats[ci];
   return { cat, q: cat.qs[qi] };
+}
+
+function clueExists(key: string): boolean {
+  const [ci, qi] = key.split('-').map(Number);
+  return activeBoard().cats[ci]?.qs[qi] !== undefined;
 }
 
 /* ---------------- board picker ---------------- */
@@ -497,7 +503,11 @@ export function resumeJeopardy(): void {
     return;
   }
   const pending = pendingWager(night, board);
-  if (pending?.kind === 'dd') {
+  if (pending?.kind === 'dd' && !clueExists(pending.key)) {
+    // A damaged save: the locked clue isn't on this board. Drop only the lock.
+    dropPendingWager(night, board);
+    saveNight();
+  } else if (pending?.kind === 'dd') {
     jeop.currentCell = pending.key;
     jeop.wager = pending.amount;
     jeop.wagerTeam = pending.team;
