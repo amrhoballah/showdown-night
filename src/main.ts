@@ -23,7 +23,7 @@ import { initMafia, renderMafia, stopMafiaTimer } from './games/mafia';
 import { initAct, startAct, resumeAct, stopActTimer } from './games/act';
 import { initEmoji, startEmoji, resumeEmoji } from './games/emoji';
 import { initWave, startWave, resumeWave } from './games/wavelength';
-import { initResults, showResults, onEndGame, GAME_NAMES } from './results';
+import { initResults, showResults, leaveResults, onEndGame, GAME_NAMES } from './results';
 
 /** Every game that feeds the night standings: where it lives, how to start a
  *  new one, and how to go back into one in progress (at the step before
@@ -44,6 +44,7 @@ function stopAllTimers(): void {
   stopActTimer();
   stopJeopardyTimer();
   stopMafiaTimer();
+  leaveResults();
 }
 
 /** "Resume …" on the card of the game in progress; the usual label elsewhere.
