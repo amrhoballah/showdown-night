@@ -83,10 +83,15 @@ function inGame(): boolean {
   return !!gameInProgress(night) && s !== 'screen-home' && s !== 'screen-mafia';
 }
 
-/** A scoreboard chip. With an `id`, double-clicking it starts a correction. */
+/** A scoreboard chip. With an `id` it is correctable: focusable, and opened
+ *  by double-click, Enter / F2, or a tap on a touchscreen (see `onCorrect`). */
 function chip(color: string, name: string, value: number, place?: number, id?: EntityId): string {
   return (
-    `<div class="score-chip"${id === undefined ? '' : ` data-id="${id}"`}>` +
+    `<div class="score-chip"${
+      id === undefined
+        ? ''
+        : ` data-id="${id}" tabindex="0" role="button" title="Double-click, Enter or tap to correct"`
+    }>` +
     (place === undefined ? '' : `<span class="place mono">${place}</span>`) +
     `<span class="swatch" style="background:${color}"></span>` +
     `<span class="name">${escapeHtml(name)}</span>` +
@@ -101,6 +106,25 @@ function standingsChips(editable = false): string {
 }
 
 // ---------- corrections ----------
+
+/** Open a correction from `el` by double-click (mouse), Enter or F2
+ *  (keyboard), or a single tap (touch, which can't reliably double-click).
+ *  Events from controls inside `el`, like a Back button, are left alone. */
+export function onCorrect(el: HTMLElement, open: () => void): void {
+  const fromInside = (t: EventTarget | null) =>
+    t !== el && t instanceof Element && !!t.closest('button, input');
+  el.addEventListener('dblclick', (e) => {
+    if (!fromInside(e.target)) open();
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.target !== el || (e.key !== 'Enter' && e.key !== 'F2')) return;
+    e.preventDefault();
+    open();
+  });
+  el.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'touch' && !fromInside(e.target)) open();
+  });
+}
 
 const ERROR_TEXT: Record<CorrectionError, (type: GameType) => string> = {
   'not-whole': () => 'Scores must be whole numbers.',
@@ -143,7 +167,9 @@ function editChip(chipEl: HTMLElement, id: EntityId): void {
       renderScoreboard();
     }
   });
-  input.addEventListener('blur', () => renderScoreboard());
+  input.addEventListener('blur', () => {
+    if (!rendering) renderScoreboard();
+  });
 }
 
 /** The entity whose finished games the corrections panel lists, if open. */
@@ -217,6 +243,19 @@ function renderPanel(): void {
 export function renderScoreboard(): void {
   saveNight();
   const row = $('scoreRow');
+  // The row is rebuilt from scratch, so remember what had keyboard focus in
+  // it (the hold button, or a chip or its open editor) and put focus back.
+  const active = document.activeElement;
+  const focusSel = !(active instanceof HTMLElement) || !row.contains(active)
+    ? null
+    : active.id === 'scoreHold'
+      ? '#scoreHold'
+      : active.closest<HTMLElement>('.score-chip[data-id]')
+        ? `.score-chip[data-id="${active.closest<HTMLElement>('.score-chip[data-id]')!.dataset.id}"]`
+        : null;
+  const refocus = () => {
+    if (focusSel) row.querySelector<HTMLElement>(focusSel)?.focus();
+  };
   $('endGameBtn').hidden = !gameInProgress(night);
   if (!night.mode) {
     row.innerHTML = '';
@@ -227,16 +266,18 @@ export function renderScoreboard(): void {
     peeking = false;
     // Finished games are corrected from Home only.
     const onHome = currentScreen() === 'screen-home';
-    row.innerHTML = '<span class="score-label">Tonight</span>' + standingsChips(onHome);
+    setRow(row, '<span class="score-label">Tonight</span>' + standingsChips(onHome));
     if (onHome) {
-      row.querySelectorAll<HTMLElement>('.score-chip').forEach((c) => {
-        c.addEventListener('dblclick', () => openPanel(dataNum(c, 'id')));
+      row.querySelectorAll<HTMLElement>('.score-chip[data-id]').forEach((c) => {
+        onCorrect(c, () => openPanel(dataNum(c, 'id')));
       });
     }
+    refocus();
     return;
   }
 
-  row.innerHTML =
+  setRow(
+    row,
     `<button class="score-label hold${peeking ? ' peeking' : ''}" id="scoreHold" ` +
     'title="Hold to see tonight&rsquo;s standings">' +
     `${peeking ? 'Tonight' : 'This game'}</button>` +
@@ -244,30 +285,63 @@ export function renderScoreboard(): void {
       ? standingsChips()
       : entitiesOf(night)
           .map((e) => chip(e.color, e.name, gameScoreOf(night, e.id), undefined, e.id))
-          .join(''));
+          .join('')),
+  );
 
-  $('scoreHold').addEventListener('pointerdown', (e) => {
+  const hold = $('scoreHold');
+  hold.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     peeking = true;
     renderScoreboard();
   });
+  // Keyboard hold: Space or Enter down peeks, releasing it (keyup, in
+  // initScoreboard) or moving focus away snaps back. Key repeat is ignored.
+  hold.addEventListener('keydown', (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    if (e.repeat || peeking) return;
+    peeking = true;
+    renderScoreboard();
+  });
+  hold.addEventListener('blur', () => {
+    if (!rendering) release();
+  });
   if (!peeking) {
-    row.querySelectorAll<HTMLElement>('.score-chip').forEach((c) => {
-      c.addEventListener('dblclick', () => editChip(c, dataNum(c, 'id')));
+    row.querySelectorAll<HTMLElement>('.score-chip[data-id]').forEach((c) => {
+      onCorrect(c, () => editChip(c, dataNum(c, 'id')));
     });
   }
+  refocus();
+}
+
+/** True while the row's markup is being replaced, so the blur that removing
+ *  a focused element can fire isn't mistaken for the host moving away. */
+let rendering = false;
+
+function setRow(row: HTMLElement, html: string): void {
+  rendering = true;
+  try {
+    row.innerHTML = html;
+  } finally {
+    rendering = false;
+  }
+}
+
+/** Snap a peek back to this game. */
+function release(): void {
+  if (!peeking) return;
+  peeking = false;
+  renderScoreboard();
 }
 
 /** Wire the listeners that live for the whole session. */
 export function initScoreboard(): void {
   // Release anywhere - the label is redrawn under the pointer, and the host
   // may drag off it - snaps the row back to this game.
-  const release = () => {
-    if (!peeking) return;
-    peeking = false;
-    renderScoreboard();
-  };
   window.addEventListener('pointerup', release);
+  window.addEventListener('keyup', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') release();
+  });
   window.addEventListener('pointercancel', release);
   window.addEventListener('blur', release);
   document.addEventListener('keydown', (e) => {

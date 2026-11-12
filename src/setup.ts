@@ -7,7 +7,7 @@
  *  allowed any time.
  */
 
-import { night, renderScoreboard, openCorrections } from './scoreboard';
+import { night, renderScoreboard, openCorrections, onCorrect } from './scoreboard';
 import {
   entitiesOf,
   leftOf,
@@ -208,7 +208,7 @@ function renderLeftList(): void {
     gone
       .map(
         (e) =>
-          `<span class="left-chip" data-id="${e.id}" title="Double-click to correct their games">` +
+          `<span class="left-chip" data-id="${e.id}" tabindex="0" role="button" title="Double-click, Enter or tap to correct their games">` +
           `<span class="swatch" style="background:${e.color}"></span>${escapeHtml(e.name)}` +
           (inGame() ? '' : `<button class="back-btn" data-back="${e.id}">Back</button>`) +
           '</span>',
@@ -219,7 +219,7 @@ function renderLeftList(): void {
     if (!back(night, dataNum(btn, 'back'))) refreshAfterChange();
   });
   area.querySelectorAll<HTMLElement>('.left-chip').forEach((chip) => {
-    chip.addEventListener('dblclick', () => openCorrections(dataNum(chip, 'id')));
+    onCorrect(chip, () => openCorrections(dataNum(chip, 'id')));
   });
 }
 
