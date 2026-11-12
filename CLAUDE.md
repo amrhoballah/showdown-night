@@ -46,7 +46,7 @@ Conventions worth matching:
 ## Game rules that are decisions, not bugs
 
 - **Mafia is not part of the night.** It tracks its own players and win condition, earns no placement points and isn't saved. Points are meaningless in social deduction; it only borrows free-for-all names to pre-fill its list.
-- **Games convert into placement points, not raw points.** When a game ends, each entity's game score becomes place points (5 / 3 / 1) plus a share of a 10-point pie, times the game type's weight, so a Jeopardy board can't outweigh the night by point scale. Night standings are always derived from finished games' game scores, never stored. The rules and worked cases live in `.scratch/even-scoring/spec.md`; the tests hold them.
+- **Games convert into placement points, not raw points.** When a game ends, each entity's game score becomes place points (5 / 3 / 1) plus a share of an exact 10-point pie, times the game type's weight (only that weighted total is rounded), so a Jeopardy board can't outweigh the night by point scale. Night standings are always derived from finished games' game scores, never stored. The rules and worked cases live in `.scratch/even-scoring/spec.md`; the tests hold them.
 - **Weights follow each game's expected length** (Emoji 1×, Act It Out and Wavelength 1.5×, Outburst 2×, Jeopardy 4×), not its stakes or difficulty, and only change by editing `weights.ts`.
 - **One game in progress at a time.** Leaving via Home keeps it in progress; launching another asks to end it first.
 - **Each Jeopardy board is its own game, played once a night.** A played board can't be restarted until New night, because its clues and Daily Double are known.

@@ -473,7 +473,9 @@ export function earnedIn(night: Night, index: number): Record<EntityId, number> 
 
 /** Placement points for one game: place points 5 / 3 / 1 by rank (ties share
  *  the better place, negatives rank normally) plus a share of a 10-point pie,
- *  times the game type's weight, rounded to a whole number with halves up.
+ *  times the game type's weight. Pie shares are kept as fractions, so the pie
+ *  is exactly 10 and ties share it equally; only the weighted total is rounded
+ *  to a whole number, halves up (the epsilon guards float error at a half).
  *
  *  The pie goes to positive scores by share; with none, the entities at 0
  *  split it; with every score negative, it is split by the inverse of each
@@ -484,15 +486,15 @@ export function placement(scores: number[], weight: number): number[] {
   const pos = scores.filter((s) => s > 0);
   if (pos.length) {
     const sum = pos.reduce((a, b) => a + b, 0);
-    pie = scores.map((s) => (s > 0 ? Math.round((10 * s) / sum) : 0));
+    pie = scores.map((s) => (s > 0 ? (10 * s) / sum : 0));
   } else if (scores.some((s) => s === 0) && scores.some((s) => s !== 0)) {
     const zeros = scores.filter((s) => s === 0).length;
-    pie = scores.map((s) => (s === 0 ? Math.round(10 / zeros) : 0));
+    pie = scores.map((s) => (s === 0 ? 10 / zeros : 0));
   } else if (scores.every((s) => s < 0)) {
     const inv = scores.reduce((a, s) => a + 1 / -s, 0);
-    pie = scores.map((s) => Math.round((10 * (1 / -s)) / inv));
+    pie = scores.map((s) => (10 * (1 / -s)) / inv);
   }
-  return scores.map((_, i) => Math.round((place[i] + pie[i]) * weight));
+  return scores.map((_, i) => Math.round((place[i] + pie[i]) * weight + 1e-9));
 }
 
 function placementOf(game: FinishedGame): Record<EntityId, number> {
