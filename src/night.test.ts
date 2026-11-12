@@ -27,6 +27,10 @@ import {
   hideDailyDouble,
   useClue,
   settleFinal,
+  lockDailyDouble,
+  lockFinalWagers,
+  pendingWager,
+  dropPendingWager,
   setupLocked,
   addTeam,
   removePlayer as remove,
@@ -247,8 +251,8 @@ describe('Jeopardy board progress', () => {
     useClue(n, 'ar', '0-0');
     useClue(n, 'ar', '1-4');
     settleFinal(n, 'ar');
-    expect(boardProgress(n, 'ar')).toEqual({ used: ['0-0', '1-4'], dailyDouble: '3-2', finalDone: true });
-    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false });
+    expect(boardProgress(n, 'ar')).toEqual({ used: ['0-0', '1-4'], dailyDouble: '3-2', finalDone: true, pending: null });
+    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false, pending: null });
   });
 
   it('starts fresh whenever a board starts a game', () => {
@@ -257,7 +261,53 @@ describe('Jeopardy board progress', () => {
     boardProgress(n, 'en').used.push('0-0');
     hideDailyDouble(n, 'en', '1-1');
     startGame(n, 'jeopardy', 'en');
-    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false });
+    expect(boardProgress(n, 'en')).toEqual({ used: [], dailyDouble: null, finalDone: false, pending: null });
+  });
+});
+
+describe('locked Jeopardy wagers', () => {
+  function board(): Night {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'en');
+    return n;
+  }
+
+  it('keep a Daily Double through a reload until its clue is used', () => {
+    const n = board();
+    const id = entitiesOf(n)[0].id;
+    hideDailyDouble(n, 'en', '2-3');
+    lockDailyDouble(n, 'en', '2-3', id, 600);
+    const back = deserialize(serialize(n));
+    expect(pendingWager(back, 'en')).toEqual({ kind: 'dd', key: '2-3', team: id, amount: 600 });
+    useClue(back, 'en', '0-0');
+    expect(pendingWager(back, 'en')).not.toBeNull();
+    useClue(back, 'en', '2-3');
+    expect(pendingWager(back, 'en')).toBeNull();
+  });
+
+  it('keep Final wagers through a reload until Final is settled', () => {
+    const n = board();
+    const [a, b] = entitiesOf(n).map((e) => e.id);
+    lockFinalWagers(n, 'en', { [a]: 300, [b]: 0 });
+    const back = deserialize(serialize(n));
+    expect(pendingWager(back, 'en')).toEqual({ kind: 'final', wagers: { [a]: 300, [b]: 0 } });
+    settleFinal(back, 'en');
+    expect(pendingWager(back, 'en')).toBeNull();
+  });
+
+  it('can be dropped without settling, leaving the clue unused', () => {
+    const n = board();
+    lockDailyDouble(n, 'en', '999-1', entitiesOf(n)[0].id, 200);
+    dropPendingWager(n, 'en');
+    expect(pendingWager(n, 'en')).toBeNull();
+    expect(boardProgress(n, 'en').used).toEqual([]);
+  });
+
+  it('belong to one board only', () => {
+    const n = board();
+    lockDailyDouble(n, 'en', '1-1', entitiesOf(n)[0].id, 200);
+    expect(pendingWager(n, 'ar')).toBeNull();
   });
 });
 
@@ -313,6 +363,17 @@ describe('the saved night', () => {
     expect(addPlayer(back, 'Omar')!.id).toBeGreaterThan(Math.max(...back.players.slice(0, 3).map((p) => p.id)));
   });
 
+  it('reads a version 1 save, with no locked wagers', () => {
+    const n = newNight();
+    setTeams(n, 2);
+    startGame(n, 'jeopardy', 'en');
+    useClue(n, 'en', '0-0');
+    const v1 = JSON.parse(JSON.stringify(n));
+    delete v1.boards.en.pending;
+    delete v1.boards.ar.pending;
+    expect(deserialize(JSON.stringify({ version: 1, night: v1 }))).toEqual(n);
+  });
+
   it.each([
     ['nothing saved', null],
     ['empty text', ''],
@@ -321,6 +382,7 @@ describe('the saved night', () => {
     ['no version', JSON.stringify(newNight())],
     ['the wrong shape', JSON.stringify({ version: 1, night: { mode: 'teams' } })],
     ['a bad game type', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'mafia', entityIds: [], scores: {} }] } })],
+    ['a malformed locked wager', JSON.stringify({ version: 2, night: { ...newNight(), boards: { en: { used: [], dailyDouble: null, finalDone: false, pending: { kind: 'dd', key: '0-1' } }, ar: newNight().boards.ar } } })],
     ['a non-whole score', JSON.stringify({ version: 1, night: { ...newNight(), games: [{ type: 'emoji', entityIds: [1], scores: { 1: 1.5 } }] } })],
   ])('falls back to a fresh night for %s', (_, data) => {
     expect(deserialize(data)).toEqual(newNight());
@@ -489,15 +551,15 @@ describe('changing the setup mid-night', () => {
 
 describe('night standings', () => {
   it('add up placement points, so a long game counts by its length, not its point scale', () => {
-    // Emoji 6-4 is 11 / 7 at 1x; Jeopardy 800-900 is 8 / 10 at 4x, so 32 / 40.
+    // Emoji 6-4 is 11 / 7 at 1x; Jeopardy 800-900 is 7.71 / 10.29 at 4x, so 31 / 41.
     const n = newNight();
     setTeams(n, 2);
     const [a, b] = entitiesOf(n);
     play(n, 'emoji', [6, 4]);
     play(n, 'jeopardy', [800, 900]);
     expect(standings(n).map((s) => [s.entity.id, s.total, s.place])).toEqual([
-      [b.id, 47, 1],
-      [a.id, 43, 2],
+      [b.id, 48, 1],
+      [a.id, 42, 2],
     ]);
   });
 
@@ -528,12 +590,12 @@ describe('night standings', () => {
 
 describe('score corrections', () => {
   it('re-rank a finished game and update the standings at once', () => {
-    // Jeopardy 800-900 is 32 / 40; corrected to 1400-900 it is 44 / 28.
+    // Jeopardy 800-900 is 31 / 41; corrected to 1400-900 it is 44 / 28.
     const n = newNight();
     setTeams(n, 2);
     const [a, b] = entitiesOf(n);
     play(n, 'jeopardy', [800, 900]);
-    expect(totals(n)).toEqual([32, 40]);
+    expect(totals(n)).toEqual([31, 41]);
     expect(setGameScore(n, 0, a.id, 1400)).toBeNull();
     expect(totals(n)).toEqual([44, 28]);
     expect(earnedIn(n, 0)).toEqual({ [a.id]: 44, [b.id]: 28 });
@@ -747,6 +809,15 @@ describe('placement', () => {
     [[-10, -1000], [15, 3]],
   ])('turns game scores %j into %j at 1x', (scores, expected) => {
     expect(placement(scores, 1)).toEqual(expected);
+  });
+
+  it('keeps the pie at exactly 10, shared equally by ties', () => {
+    // 5 + 3⅓ each: 8.33 at 1x, 12.5 rounds up to 13 at 1.5x.
+    expect(placement([5, 5, 5], 1)).toEqual([8, 8, 8]);
+    expect(placement([5, 5, 5], 1.5)).toEqual([13, 13, 13]);
+    // Twelve tied players: 5 + ⅚ each, not 5 + 1.
+    expect(placement(Array(12).fill(1), 1)).toEqual(Array(12).fill(6));
+    expect(placement(Array(12).fill(1), 4)).toEqual(Array(12).fill(23));
   });
 
   it('gives 4th place and below no place points', () => {

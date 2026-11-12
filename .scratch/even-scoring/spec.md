@@ -149,7 +149,7 @@ Around that:
 
 ### Placement formula (inside the Night module)
 
-Place points 5 / 3 / 1 by rank (4th and below 0); tied entities share the better place; negatives rank normally. The pie goes to positive scores; if there are none, entities at 0 split it equally; if every score is negative, it is split by the inverse of each score's size; if every score is exactly 0, there is no pie. The weight multiplies place points plus pie, and the result is rounded to the nearest whole number with halves up. This snippet came from the edit-surface prototype and was checked against every worked case in "How are ties and negative game scores placed?":
+Place points 5 / 3 / 1 by rank (4th and below 0); tied entities share the better place; negatives rank normally. The pie goes to positive scores; if there are none, entities at 0 split it equally; if every score is negative, it is split by the inverse of each score's size; if every score is exactly 0, there is no pie. Pie shares are kept as fractions, so the pie is exactly 10 and ties share it equally. The weight multiplies place points plus pie, and only that result is rounded to the nearest whole number with halves up. This snippet came from the edit-surface prototype and was checked against every worked case in "How are ties and negative game scores placed?":
 
 ```ts
 function placement(scores: number[], weight: number): number[] {
@@ -158,15 +158,15 @@ function placement(scores: number[], weight: number): number[] {
   const pos = scores.filter((s) => s > 0);
   if (pos.length) {
     const sum = pos.reduce((a, b) => a + b, 0);
-    pie = scores.map((s) => (s > 0 ? Math.round((10 * s) / sum) : 0));
+    pie = scores.map((s) => (s > 0 ? (10 * s) / sum : 0));
   } else if (scores.some((s) => s === 0) && scores.some((s) => s !== 0)) {
     const zeros = scores.filter((s) => s === 0).length;
-    pie = scores.map((s) => (s === 0 ? Math.round(10 / zeros) : 0));
+    pie = scores.map((s) => (s === 0 ? 10 / zeros : 0));
   } else if (scores.every((s) => s < 0)) {
     const inv = scores.reduce((a, s) => a + 1 / -s, 0);
-    pie = scores.map((s) => Math.round((10 * (1 / -s)) / inv));
+    pie = scores.map((s) => (10 * (1 / -s)) / inv);
   }
-  return scores.map((_, i) => Math.round((place[i] + pie[i]) * weight));
+  return scores.map((_, i) => Math.round((place[i] + pie[i]) * weight + 1e-9));
 }
 ```
 

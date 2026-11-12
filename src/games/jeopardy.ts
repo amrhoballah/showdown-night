@@ -27,6 +27,10 @@ import {
   hideDailyDouble,
   useClue,
   settleFinal,
+  lockDailyDouble,
+  lockFinalWagers,
+  pendingWager,
+  dropPendingWager,
 } from '../night';
 import { endGameNow } from '../results';
 import { $, show, escapeHtml, onClickAll, dataNum } from '../ui';
@@ -96,6 +100,11 @@ function cellData(key: string): { cat: Category; q: Question } {
   const [ci, qi] = key.split('-').map(Number);
   const cat = activeBoard().cats[ci];
   return { cat, q: cat.qs[qi] };
+}
+
+function clueExists(key: string): boolean {
+  const [ci, qi] = key.split('-').map(Number);
+  return activeBoard().cats[ci]?.qs[qi] !== undefined;
 }
 
 /* ---------------- board picker ---------------- */
@@ -205,6 +214,9 @@ function showQuestion(d: { cat: Category; q: Question }, pts: number): void {
   $('skipAwardBtn').textContent = b.rtl ? 'لا أحد أجاب — تخطَّ' : 'No one got it — skip';
   $('backToBoardBtn').textContent = b.rtl ? '→ عودة إلى اللوحة' : '← Back to board';
 
+  // A locked Daily Double can't be backed out of once the clue is seen.
+  $('backToBoardBtn').hidden = !!jeop.wager;
+
   const note = $('ddNote');
   note.hidden = !jeop.wager;
   if (jeop.wager) {
@@ -259,6 +271,9 @@ function renderDailyDouble(d: { cat: Category; q: Question }): void {
     const cap = Math.max(d.q.v, scoreOf(id));
     jeop.wager = Math.min(cap, Math.max(d.q.v, parseInt(inp.value, 10) || d.q.v));
     jeop.wagerTeam = id;
+    // Locked as the clue shows: from here it can only be settled.
+    lockDailyDouble(night, jeop.lang, jeop.currentCell!, id, jeop.wager);
+    saveNight();
     showQuestion(d, jeop.wager);
   });
 
@@ -319,7 +334,9 @@ export function stopJeopardyTimer(): void {
   clearInterval(finalTimer);
 }
 
-export function renderFinal(step: FinalStep): void {
+/** `timed` is false when resuming a locked Final: the question comes back
+ *  without its clock, so no timer carries on. */
+export function renderFinal(step: FinalStep, timed = true): void {
   const b = activeBoard();
   const ents = entitiesOf(night);
   const card = $('finalCard');
@@ -360,6 +377,9 @@ export function renderFinal(step: FinalStep): void {
         const v = parseInt(($(`fW${e.id}`) as HTMLInputElement).value, 10) || 0;
         jeop.finalWagers[e.id] = Math.min(cap, Math.max(0, v));
       });
+      // Locked as the question shows: leaving or reloading can't reset them.
+      lockFinalWagers(night, jeop.lang, jeop.finalWagers);
+      saveNight();
       renderFinal('question');
     });
     show('screen-final');
@@ -370,7 +390,7 @@ export function renderFinal(step: FinalStep): void {
     let secs = 60;
     card.innerHTML =
       `<p class="kicker">${escapeHtml(b.finalCat)}</p>` +
-      '<div class="timer" id="fTimer">60</div>' +
+      (timed ? '<div class="timer" id="fTimer">60</div>' : '') +
       `<p class="qtext${arCls}" style="font-size:clamp(1.3rem,3.2vw,2rem);">${escapeHtml(b.finalQ)}</p>` +
       `<p class="sub${arCls}">${
         b.rtl
@@ -380,7 +400,7 @@ export function renderFinal(step: FinalStep): void {
       `<button class="btn ghost" id="fReveal">${b.rtl ? 'اكشف الإجابة' : 'Reveal the answer'}</button>`;
 
     stopJeopardyTimer();
-    finalTimer = window.setInterval(() => {
+    if (timed) finalTimer = window.setInterval(() => {
       secs--;
       const el = document.getElementById('fTimer');
       if (!el) {
@@ -396,6 +416,7 @@ export function renderFinal(step: FinalStep): void {
       stopJeopardyTimer();
       renderFinal('verdict');
     });
+    show('screen-final');
     return;
   }
 
@@ -462,11 +483,12 @@ export function startJeopardy(): void {
   renderPicker();
 }
 
-/** Back into the board in progress, skipping the picker. An open clue, a
- *  placed Daily Double wager or a Final Jeopardy under way is dropped, so
- *  nothing secret is shown again and no wager stands half-played; the clue
- *  stays unused and Final Jeopardy can be started again. A settled Final
- *  returns to its End game prompt. */
+/** Back into the board in progress, skipping the picker. An open normal clue
+ *  is dropped and stays unused. A locked wager is not: a Daily Double returns
+ *  to its clue with the same team and stake, and a Final whose wagers were
+ *  locked returns to its question without the clock - the room has seen the
+ *  clue, so the wager must be settled. A settled Final returns to its End
+ *  game prompt. */
 export function resumeJeopardy(): void {
   const board = gameInProgress(night)?.board;
   if (!board) {
@@ -478,6 +500,23 @@ export function resumeJeopardy(): void {
   jeop.currentCell = null;
   if (boardProgress(night, board).finalDone) {
     renderFinal('settled');
+    return;
+  }
+  const pending = pendingWager(night, board);
+  if (pending?.kind === 'dd' && !clueExists(pending.key)) {
+    // A damaged save: the locked clue isn't on this board. Drop only the lock.
+    dropPendingWager(night, board);
+    saveNight();
+  } else if (pending?.kind === 'dd') {
+    jeop.currentCell = pending.key;
+    jeop.wager = pending.amount;
+    jeop.wagerTeam = pending.team;
+    showQuestion(cellData(pending.key), pending.amount);
+    return;
+  }
+  if (pending?.kind === 'final') {
+    jeop.finalWagers = { ...pending.wagers };
+    renderFinal('question', false);
     return;
   }
   show('screen-board');
@@ -506,7 +545,7 @@ export function initJeopardy(): void {
   });
 
   $('backToBoardBtn').addEventListener('click', () => {
-    jeop.wager = 0;
+    if (jeop.wager) return;
     show('screen-board');
     renderBoard();
   });
