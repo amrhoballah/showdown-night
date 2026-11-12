@@ -121,6 +121,11 @@ export function onCorrect(el: HTMLElement, open: () => void): void {
     e.preventDefault();
     open();
   });
+  // Assistive tech activates role="button" with a synthesized click, which
+  // has detail 0; mouse and touch clicks count from 1, so they don't open.
+  el.addEventListener('click', (e) => {
+    if (e.detail === 0 && !fromInside(e.target)) open();
+  });
   el.addEventListener('pointerup', (e) => {
     if (e.pointerType === 'touch' && !fromInside(e.target)) open();
   });
